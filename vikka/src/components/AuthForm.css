@@ -1,0 +1,175 @@
+/* Общий контейнер */
+.auth-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: white;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Логотип VIKKA */
+.logo {
+  font-family: "Archivo Black", sans-serif;
+  position: absolute;
+  top: 15%;  
+  font-size: 90px;
+  font-weight: 900;
+  text-align: center;
+}
+
+/* Карточка формы */
+.auth-box {
+  background: white;
+  padding: 50px 30px;
+  border-radius: 50px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+  width: 350px;
+  border: 1px solid #ff833a;
+  text-align: center;
+}
+
+.form-control {
+  width: 100%;
+  margin-bottom: 20px;
+  border: 1px solid #868686; 
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.form-group label {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 5px;
+  color: #333; /* Темный текст */
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #e68900; /* Немного темнее при фокусе */
+}
+
+/* Группа пароля */
+.password-group {
+  position: relative;
+}
+
+/* Обертка для скрытия/показа пароля */
+.password-wrapper {
+  position: relative;
+}
+
+.password-wrapper .eye-icon {
+  position: absolute;
+  top: 45%;
+  right: 10px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+/* Кастомная кнопка */
+.auth-btn {
+  background: #ff833a;
+  color: white;
+  border: none;
+  padding: 10px;
+  font-size: 16px;
+  border-radius: 8px;
+  width: 80%;
+  margin-top: 30px;
+  transition: 0.3s;
+}
+
+.auth-btn:hover {
+  background: darkorange;
+}
+
+/* Ссылки */
+.small-link {
+  color: gray;
+  text-decoration: none;
+}
+
+.small-link:hover {
+  text-decoration: underline;
+}
+
+.circles {
+  position: absolute;
+  left: -100px;
+  top: 500px;
+  width: 800px;
+  height: 800px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.circles-center {
+  position: absolute;
+  left: 200px;
+  top: 0px;
+  width: 800px;
+  height: 800px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.circles-right {
+  position: absolute;
+  right: 50px;
+  top: -250px;
+  width: 700px;
+  height: 700px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.circles div, .circles-center div, .circles-right div {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+.circles div { border: 1px solid #ff833a; }
+.circles-center div { border: 1px solid #4d4d4d; }
+.circles-right div { border: 1px solid #ff833a; }
+
+.circles div:nth-child(1), .circles-right div:nth-child(1) { width: 80%; height: 80%; }
+.circles div:nth-child(2), .circles-right div:nth-child(2) { width: 70%; height: 70%; }
+.circles div:nth-child(3), .circles-right div:nth-child(3) { width: 60%; height: 60%; }
+.circles div:nth-child(4), .circles-right div:nth-child(4) { width: 40%; height: 40%; }
+.circles div:nth-child(5), .circles-right div:nth-child(5) { width: 20%; height: 20%; }
+
+.circles-center div:nth-child(1) { width: 40%; height: 40%; }
+.circles-center div:nth-child(2) { width: 35%; height: 35%; }
+.circles-center div:nth-child(3) { width: 30%; height: 30%; }
+.circles-center div:nth-child(4) { width: 20%; height: 20%; }
+.circles-center div:nth-child(5) { width: 5%; height: 5%; }
+
+
+@media screen and (max-width: 768px) {
+  /* Убираем круги на мобильных */
+  .circles, .circles-center, .circles-right {
+    display: none;
+  }
+
+  /* Уменьшаем логотип */
+  .logo {
+    font-size: 60px;
+    top: 5%;
+  }
+
+  /* Делаем форму шире и удобнее */
+  .auth-box {
+    width: 90%;
+    padding: 30px;
+  }
+}
