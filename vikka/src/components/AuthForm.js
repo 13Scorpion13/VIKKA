@@ -66,14 +66,14 @@ const AuthForm = () => {
       </div>
       {/* Логотип отдельно за окном */}
       <h1 className="logo">
-      <svg width="252" height="100" viewBox="0 0 252 100" xmlns="http://www.w3.org/2000/svg">
-        <text x="0" y="75" font-family="Archivo Black, sans-serif" font-size="80" font-weight="bold" fill="#4d4d4d">V</text>
-        <text x="54" y="75" font-family="Archivo Black, sans-serif" font-size="80" font-weight="bold" fill="#4d4d4d">I</text>
-        <text x="72" y="75" font-family="Archivo Black, sans-serif" font-size="80" font-weight="bold" fill="#ff833a">K</text>
-        <text x="130" y="75" font-family="Archivo Black, sans-serif" font-size="80" font-weight="bold" fill="#ff833a">K</text>
-        <text x="190" y="75" font-family="Archivo Black, sans-serif" font-size="80" font-weight="bold" fill="#4d4d4d">A</text>
-      </svg>
-      
+        <svg width="209" height="100" viewBox="0 0 209 100" xmlns="http://www.w3.org/2000/svg">
+          <text x="0" y="75" fill="#4d4d4d">V</text>
+          <text x="50" y="75" fill="#4d4d4d">I</text>
+          <text x="66" y="75" fill="#ff833a">K</text>
+          <text x="146" y="75" fill="#4d4d4d">A</text>
+          <text x="113" y="75" fill="#ff833a">K</text>
+        </svg>
+        
         {/* <span className="logo-gray">VI</span>
         <span className="logo-orange">KK</span>
         <span className="logo-gray">A</span> */}

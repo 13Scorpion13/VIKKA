@@ -1,3 +1,12 @@
+@font-face {
+  font-family: 'Scream Real';
+  src: url('../fonts/screamreal.woff2') format('woff2'),
+       url('../fonts/screamreal.woff') format('woff'),
+       url('../fonts/screamreal.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 /* Общий контейнер */
 .auth-container {
   display: flex;
@@ -11,11 +20,11 @@
 
 /* Логотип VIKKA */
 .logo {
-  font-family: "Archivo Black", sans-serif;
+  font-family: 'Scream Real', sans-serif;
   position: absolute;
   top: 15%;  
-  font-size: 90px;
-  font-weight: 900;
+  font-size: 70px;
+  font-weight: 400;
   text-align: center;
 }
 
@@ -156,10 +165,33 @@
 
 
 @media screen and (max-width: 768px) {
-  /* Убираем круги на мобильных */
-  .circles, .circles-center, .circles-right {
+  .circles {
+    width: 300px;
+    height: 300px;
+    left: -100px;
+    top: -100px;
+  }
+
+  .circles-right {
+    width: 300px;
+    height: 300px;
+    right: -100px;
+    bottom: -100px;
+    top: auto;
+  }
+
+  .circles-center {
     display: none;
   }
+
+  .circles div, .circles-right div {
+    border-width: 0.8px;
+  }
+
+  /* Убираем круги на мобильных */
+  /* .circles, .circles-center, .circles-right {
+    display: none;
+  } */
 
   /* Уменьшаем логотип */
   .logo {
