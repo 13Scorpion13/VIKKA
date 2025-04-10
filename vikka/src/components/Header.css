@@ -1,0 +1,27 @@
+.header {
+  background-color: #FF833A;
+  color: white;
+  position: relative;
+}
+  
+.header a {
+  color: white;
+  text-decoration: none;
+}
+  
+.header-curve-wrapper {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 100px;
+  overflow: hidden;
+  line-height: 0;
+  pointer-events: none;
+}
+  
+.header-curve {
+  width: 100%;
+  height: 150%;
+  display: block;
+}
+

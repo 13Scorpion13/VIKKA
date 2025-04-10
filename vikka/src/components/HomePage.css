@@ -1,0 +1,215 @@
+.homepage-container {
+  font-family: Arial, sans-serif;
+}
+
+.recent-templates {
+  background-color: #FF833A;
+  color: white;
+  padding: 60px;
+  margin-top: 50px;
+  position: relative;
+  overflow: hidden;
+}
+
+.section-title {
+  text-align: left;
+  margin-left: 110px;
+}
+
+.circle-group {
+  position: absolute;
+  top: 50%;
+  right: 100px;
+  transform: translateY(-50%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.circle {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+}
+
+.circle1 {
+  width: 540px;
+  height: 540px;
+}
+
+.circle2 {
+  width: 480px;
+  height: 480px;
+}
+
+.circle3 {
+  width: 380px;
+  height: 380px;
+}
+
+.circle4 {
+  width: 220px;
+  height: 220px;
+}
+
+.circle5 {
+  width: 60px;
+  height: 60px;
+}
+
+.templates-scroll {
+  display: flex;
+  overflow-x: auto;
+  padding-top: 20px;
+  margin-left: 0px;
+}
+
+.template-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: auto;
+  padding: 0px 12px;
+  z-index: 1;
+}
+
+.template-card {
+  background: white;
+  width: 220px;
+  z-index: 1;
+  height: 320px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.template-info {
+  color: white;
+  margin-top: 8px;
+  text-align: left;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.template-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 15px;
+  align-self: stretch;
+}
+
+.arrow-button {
+  background-color: white;
+  color: #FF833A;
+  border-radius: 8px;
+  border: none;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  align-self: center;
+  margin-bottom: 100%;
+  margin-right: 15px;
+}
+
+.arrow-button:focus {
+  border: none;
+  box-shadow: none;
+}
+
+.arrow-button.orange {
+  background-color: #FF833A;
+  color: white;
+}
+
+.all-templates {
+  background: white;
+  margin-left: 0px;
+}
+
+.all-templates .row {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.all-templates-header {
+  height: 60px;
+  margin-left: 110px;
+  margin-right: 130px;
+}
+
+.left-controls {
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  width: 500px;
+  margin-bottom: 0;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-radius: 25px;
+}
+
+.left-circle1 { width: 700px; height: 700px; }
+.left-circle2 { width: 620px; height: 620px; }
+.left-circle3 { width: 420px; height: 420px; }
+.left-circle4 { width: 220px; height: 220px; }
+.left-circle5 { width: 60px; height: 60px; }
+
+.right-circle1 { width: 320px; height: 320px; }
+.right-circle2 { width: 280px; height: 280px; }
+.right-circle3 { width: 200px; height: 200px; }
+.right-circle4 { width: 120px; height: 120px; }
+.right-circle5 { width: 40px; height: 40px; }
+
+.orange-circle-group-left,
+.orange-circle-group-right {
+  position: absolute;
+  bottom: 20px;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 160%;
+  pointer-events: none;
+}
+
+.orange-circle-group-left {
+  left: 330px;
+  
+}
+
+.orange-circle-group-right {
+  right: 170px;
+  height: 100px;
+}
+
+.orange-circle-group-left .circle,
+.orange-circle-group-right .circle {
+  position: absolute;
+  border: 1px solid #FF833A;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.btn-icon {
+  border: none;
+  background-color: white;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+/* Иконки (по желанию можно задать цвет) */
+.btn-icon i {
+  font-size: 1.1rem;
+}

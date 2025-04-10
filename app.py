@@ -1,11 +1,10 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # Импортируем CORS
+from flask_cors import CORS
 from ldap3 import Server, Connection, ALL, NTLM
 
 app = Flask(__name__)
 CORS(app)
 
-# Параметры подключения к OpenLDAP
 LDAP_SERVER = "ldap://localhost:389"
 BASE_DN = "dc=test,dc=local"
 LDAP_ADMIN = "cn=admin,dc=test,dc=local"
@@ -18,7 +17,6 @@ def login():
         username = data['username']
         password = data['password']
         
-        # Создаем соединение с сервером LDAP
         server = Server(LDAP_SERVER, get_info=ALL)
         conn = Connection(server, user=f"cn={username},{BASE_DN}", password=password, auto_bind=True)
         

@@ -1,0 +1,110 @@
+.editor-content-section {
+    padding: 2rem;
+}
+  
+.document-title {
+    font-size: 1.75rem;
+    font-weight: bold;
+    color: #333;
+    margin-top: 50px;
+    margin-left: 340px;
+    padding-bottom: 50px;
+}
+  
+.approval-box {
+    background-color: #FF833A;
+    min-width: 240px;
+    max-width: 300px;
+    font-size: 18px;
+    border-radius: 12px;
+}
+
+.editor-document {
+    background: #f5f5f5;
+    padding: 10px;
+    border-radius: 12px;
+  }
+  
+.document-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    z-index: 1;
+}
+  
+.editor-actions {
+    background-color: #FF833A;
+    width: 60px;
+    border-radius: 12px;
+    z-index: 1;
+}
+  
+.menu-icon {
+    font-size: 24px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+  
+.menu-icon:hover {
+    transform: scale(1.1);
+}
+
+.a4-frame {
+    width: 794px;
+    height: 1123px;
+    border: none;
+    background: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+  
+.white-icon {
+    color: white;
+}
+
+.circle {
+    position: absolute;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+}
+
+.editor-left-circle1 { width: 900px; height: 900px; }
+.editor-left-circle2 { width: 800px; height: 800px; }
+.editor-left-circle3 { width: 700px; height: 700px; }
+.editor-left-circle4 { width: 450px; height: 450px; }
+.editor-left-circle5 { width: 160px; height: 160px; }
+
+.editor-right-circle1 { width: 380px; height: 380px; }
+.editor-right-circle2 { width: 330px; height: 330px; }
+.editor-right-circle3 { width: 280px; height: 280px; }
+.editor-right-circle4 { width: 170px; height: 170px; }
+.editor-right-circle5 { width: 70px; height: 70px; }
+
+.orange-circle-editor-group-left,
+.orange-circle-editor-group-right {
+  position: absolute;
+  bottom: 20px;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  pointer-events: none;
+}
+
+.orange-circle-editor-group-left {
+  left: 330px;
+  top: 140%;
+}
+
+.orange-circle-editor-group-right {
+  right: 450px;
+  top: 20%;
+}
+
+.orange-circle-editor-group-left .circle,
+.orange-circle-editor-group-right .circle {
+  position: absolute;
+  border: 1px solid #FF833A;
+  border-radius: 50%;
+  background: transparent;
+}

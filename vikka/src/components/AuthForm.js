@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
-import "./AuthForm.css";
+import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "./AuthForm.css";
+
 
 const AuthForm = () => {
   const [formData, setFormData] = useState({
@@ -10,6 +12,7 @@ const AuthForm = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -29,6 +32,7 @@ const AuthForm = () => {
       const result = await response.json();
       if (response.ok) {
         alert("Успешная авторизация!");
+        navigate("/home");
       } else {
         setError(result.message || "Ошибка авторизации");
       }
@@ -39,7 +43,6 @@ const AuthForm = () => {
 
   return (
     <div className="auth-container">
-      {/* Левая группа кругов */}
       <div className="circles">
         <div></div>
         <div></div>
@@ -56,7 +59,6 @@ const AuthForm = () => {
         <div></div>
       </div>
 
-      {/* Правая группа кругов */}
       <div className="circles-right">
         <div></div>
         <div></div>
@@ -64,7 +66,7 @@ const AuthForm = () => {
         <div></div>
         <div></div>
       </div>
-      {/* Логотип отдельно за окном */}
+
       <h1 className="logo">
         <svg width="209" height="100" viewBox="0 0 209 100" xmlns="http://www.w3.org/2000/svg">
           <text x="0" y="75" fill="#4d4d4d">V</text>
@@ -73,10 +75,6 @@ const AuthForm = () => {
           <text x="146" y="75" fill="#4d4d4d">A</text>
           <text x="113" y="75" fill="#ff833a">K</text>
         </svg>
-        
-        {/* <span className="logo-gray">VI</span>
-        <span className="logo-orange">KK</span>
-        <span className="logo-gray">A</span> */}
       </h1>
 
       <div className="auth-box">

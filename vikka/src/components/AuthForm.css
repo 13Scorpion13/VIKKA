@@ -7,7 +7,6 @@
   font-style: normal;
 }
 
-/* Общий контейнер */
 .auth-container {
   display: flex;
   justify-content: center;
@@ -18,7 +17,6 @@
   overflow: hidden;
 }
 
-/* Логотип VIKKA */
 .logo {
   font-family: 'Scream Real', sans-serif;
   position: absolute;
@@ -28,7 +26,6 @@
   text-align: center;
 }
 
-/* Карточка формы */
 .auth-box {
   background: white;
   padding: 50px 30px;
@@ -52,20 +49,18 @@
   width: 100%;
   text-align: left;
   margin-bottom: 5px;
-  color: #333; /* Темный текст */
+  color: #333;
 }
 
 .form-control:focus {
   outline: none;
-  border-color: #e68900; /* Немного темнее при фокусе */
+  border-color: #e68900;
 }
 
-/* Группа пароля */
 .password-group {
   position: relative;
 }
 
-/* Обертка для скрытия/показа пароля */
 .password-wrapper {
   position: relative;
 }
@@ -81,7 +76,6 @@
   font-size: 18px;
 }
 
-/* Кастомная кнопка */
 .auth-btn {
   background: #ff833a;
   color: white;
@@ -98,7 +92,6 @@
   background: darkorange;
 }
 
-/* Ссылки */
 .small-link {
   color: gray;
   text-decoration: none;
@@ -123,8 +116,8 @@
   position: absolute;
   left: 200px;
   top: 0px;
-  width: 800px;
-  height: 800px;
+  width: 400px;
+  height: 400px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -188,18 +181,11 @@
     border-width: 0.8px;
   }
 
-  /* Убираем круги на мобильных */
-  /* .circles, .circles-center, .circles-right {
-    display: none;
-  } */
-
-  /* Уменьшаем логотип */
   .logo {
     font-size: 60px;
     top: 5%;
   }
 
-  /* Делаем форму шире и удобнее */
   .auth-box {
     width: 90%;
     padding: 30px;
