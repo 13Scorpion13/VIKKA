@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import arrowIcon from '../icons/arrow.svg';
 import infoIcon from '../icons/info.svg';
@@ -7,20 +8,169 @@ import profileIcon from '../icons/profile.svg';
 import "./HomePage.css";
 import "./Header.css";
 
-const lastTemplates = [
-  ...Array(6).fill({ title: "Документ 1", time: "5 минут назад" }),
-  ...Array(6).fill({ title: "Документ 2", time: "1 минуту назад" }),
-  ...Array(3).fill({ title: "Документ 3", time: "Только что" })
-];
-
-const allTemplates = Array(30).fill({ title: "Документ 1" });
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const HomePage = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [allTemplatesPage, setAllTemplatesPage] = useState(0);
+  const [lastTemplates, setLastTemplates] = useState([]);
+  const [recentTemplates, setRecentTemplates] = useState([]);
+  const [allTemplates, setAllTemplates] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const navigate = useNavigate();
+
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    contractNumber: "",
+    contractDate: "",
+    fileLink: "",
+    recipient: "",
+    signer: ""
+  });
+
 
   const templatesPerPage = 6;
   const allTemplatesPerPage = 12;
+
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('http://localhost:8000/api/templates/all');
+        const data = await response.json();
+        setAllTemplates(data);
+        
+        const savedRecent = JSON.parse(localStorage.getItem('recentTemplates')) || [];
+        setRecentTemplates(savedRecent);
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
+
+  /* useEffect(() => {
+    const fetchRecentTemplates = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/templates/recent');
+        const data = await response.json();
+        setLastTemplates(data);
+      } catch (error) {
+        console.error('Error fetching recent templates:', error);
+      }
+    };
+
+    const fetchAllTemplates = async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/templates/all?skip=${allTemplatesPage * allTemplatesPerPage}&limit=${allTemplatesPerPage}`);
+        const data = await response.json();
+        setAllTemplates(data);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching all templates:', error);
+        setIsLoading(false);
+      }
+    };
+
+    fetchRecentTemplates();
+    fetchAllTemplates();
+  }, [allTemplatesPage]); */
+
+
+
+  const handleTemplateClick = (template) => {
+    setSelectedTemplate(template);
+    setShowModal(true);
+  };
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleCancel = () => {
+    setShowModal(false);
+    setFormData({
+      contractNumber: "",
+      contractDate: "",
+      fileLink: "",
+      recipient: "",
+      signer: ""
+    });
+  };
+
+
+
+
+  //const handleTemplateClick
+  const handleConfirm = async () => {
+    try {
+      setIsLoading(true);
+      setShowModal(false);
+      //setSelectedTemplate(template);
+      
+      const updatedRecent = [
+        selectedTemplate,
+        ...recentTemplates.filter(t => t.id !== selectedTemplate.id)
+      ].slice(0, 6);
+      
+      setRecentTemplates(updatedRecent);
+      localStorage.setItem('recentTemplates', JSON.stringify(updatedRecent));
+
+      const response = await fetch('http://localhost:8000/api/process-document/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docx_path: selectedTemplate.document_path })
+      });
+
+      if (!response.ok) throw new Error('Ошибка обработки документа');
+      
+      const result = await response.json();
+      navigate('/editor', { state: { 
+        pdfPath: result.pdf_path,
+        templateTitle: selectedTemplate.title
+      }});
+    } catch (error) {
+      console.error('Error:', error);
+      alert(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /* const handleTemplateClick = async (template) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/process-document/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          docx_path: template.document_path
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.status === "success") {
+        navigate('/editor', {
+          state: {
+            pdfPath: result.pdf_path,
+            templateTitle: template.title
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error processing document:', error);
+    }
+  }; */
 
   const totalPages = Math.ceil(lastTemplates.length / templatesPerPage);
   const totalAllPages = Math.ceil(allTemplates.length / allTemplatesPerPage);
@@ -59,6 +209,14 @@ const HomePage = () => {
     (allTemplatesPage + 1) * allTemplatesPerPage
   );
 
+  if (isLoading) {
+    return <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="spinner-border text-primary" role="status">
+        <span className="visually-hidden">Loading...</span>
+      </div>
+    </div>;
+  }
+
   return (
     <div className="homepage-container">
       {/* Хедер */}
@@ -75,7 +233,7 @@ const HomePage = () => {
             </div>
             <div className="nav-item d-flex align-items-center">
               <img src={profileIcon} className="me-2"/>
-              <span>Имя Имя</span>
+              <span>Гараева Ксения</span>
             </div>
           </nav>
         </div>
@@ -109,12 +267,44 @@ const HomePage = () => {
               </button>
             </div>
             <div className="d-flex justify-content-start flex-nowrap gap-4">
-              {displayedTemplates.map((tpl, index) => (
-                <div key={index} className="template-wrapper">
-                  <div className="template-card shadow"></div>
-                  <div className="template-info">
+              {recentTemplates.map((tpl, index) => (
+                  <div 
+                    key={`recent-${tpl.id || index}`} 
+                    className="template-wrapper"
+                    /* onClick={() => handleTemplateClick(tpl)} */
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleTemplateClick(tpl);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="template-card shadow">
+                      <img 
+                        src={`http://localhost:8000/preview/${tpl.preview_image}`}
+                        alt={tpl.title}
+                        className="img-fluid template-preview"
+                        onError={(e) => e.target.src = '/placeholder.png'}
+                      />
+                    </div>
+{/*             {displayedTemplates.map((tpl, index) => (
+                <div
+                 key={tpl.id || index}
+                 className="template-wrapper"
+                 onClick={() => handleTemplateClick(tpl)}
+                 style={{ cursor: 'pointer'}}
+                > 
+                  <div className="template-card shadow">
+                    {tpl.preview_image && (
+                      <img 
+                        src={`http://localhost:8000/templates${tpl.preview_image}`} 
+                        alt={tpl.title} 
+                        className="img-fluid template-preview"
+                      />
+                    )}
+                  </div> */}
+                  <div className="template-info text-center">
                     <strong>{tpl.title}</strong><br />
-                    <small>{tpl.time}</small>
+                    <small>{tpl.last_modified}</small>
                   </div>
                 </div>
               ))}
@@ -178,8 +368,34 @@ const HomePage = () => {
           </div>
           <div className="d-flex gap-4 flex-wrap">
             {displayedAllTemplates.map((tpl, index) => (
-              <div key={index} className="template-wrapper">
-                <div className="template-card shadow"></div>
+                <div 
+                  key={`all-${tpl.id || index}`}
+                  className="template-wrapper"
+                  /* onClick={() => handleTemplateClick(tpl)} */
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleTemplateClick(tpl);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="template-card shadow">
+                    <img 
+                      src={`http://localhost:8000/preview/${tpl.preview_image}`}
+                      alt={tpl.title}
+                      className="img-fluid template-preview"
+                      onError={(e) => e.target.src = '/placeholder.png'}
+                    />
+                  </div>
+{/*           {displayedAllTemplates.map((tpl, index) => (
+              <div key={tpl.id || index} className="template-wrapper">
+                <div className="template-card shadow">
+                  {tpl.preview_image && (
+                    <img 
+                      src={`http://localhost:8000/templates${tpl.preview_image}`} 
+                      className="img-fluid template-preview"
+                    />
+                  )}
+                </div> */}
                 <div className="template-info-dark mt-2 text-center">
                   <strong>{tpl.title}</strong>
                 </div>
@@ -198,6 +414,76 @@ const HomePage = () => {
         </div>
 
       </section>
+      
+      {showModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Заполните данные</h3>
+            <div className="modal-form">
+              <div className="form-group">
+                <label>Номер и дата договора</label>
+                <input
+                  type="text"
+                  name="contractNumber"
+                  value={formData.contractNumber}
+                  onChange={handleFormChange}
+                  placeholder="Номер договора"
+                />
+                <input
+                  type="date"
+                  name="contractDate"
+                  value={formData.contractDate}
+                  onChange={handleFormChange}
+                  className="mt-2"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Ссылка на проводник</label>
+                <input
+                  type="text"
+                  name="fileLink"
+                  value={formData.fileLink}
+                  onChange={handleFormChange}
+                  placeholder="Укажите путь к файлу"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Адресат</label>
+                <input
+                  type="text"
+                  name="recipient"
+                  value={formData.recipient}
+                  onChange={handleFormChange}
+                  placeholder="ФИО или название организации"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Подписант</label>
+                <input
+                  type="text"
+                  name="signer"
+                  value={formData.signer}
+                  onChange={handleFormChange}
+                  placeholder="ФИО подписанта"
+                />
+              </div>
+            </div>
+            
+            <div className="modal-buttons">
+              <button onClick={handleCancel} className="btn btn-secondary">
+                Отмена
+              </button>
+              <button onClick={handleConfirm} className="btn btn-primary">
+                Подтвердить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
