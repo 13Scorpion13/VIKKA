@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
+from bs4 import BeautifulSoup
+from docx import Document
 import os
 import time
 from pathlib import Path
@@ -81,7 +83,7 @@ async def process_document(request: Request):
         full_docx_path = main(docx_path)
         print(f"[2/6] Обработанный путь: {full_docx_path}")
 
-        if not os.path.exists(full_docx_path):
+        """ if not os.path.exists(full_docx_path):
             error_msg = f"Файл {full_docx_path} не найден после обработки"
             print(f"[ERROR] {error_msg}")
             raise HTTPException(status_code=404, detail=error_msg)
@@ -105,13 +107,12 @@ async def process_document(request: Request):
         except Exception as conv_error:
             error_msg = f"Ошибка конвертации: {str(conv_error)}"
             print(f"[ERROR] {error_msg}")
-            raise HTTPException(status_code=500, detail=error_msg)
+            raise HTTPException(status_code=500, detail=error_msg) """
         
         # 6. Возвращаем результат
         return JSONResponse({
-            "pdf_path": f"/converted_files/{pdf_filename}",
-            "status": "success",
-            "file_size": os.path.getsize(pdf_path)
+            "full_docx_path": full_docx_path,
+            "status": "success"
         })
         
     except HTTPException:
@@ -120,3 +121,31 @@ async def process_document(request: Request):
         error_msg = f"Непредвиденная ошибка: {str(e)}"
         print(f"[CRITICAL ERROR] {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
+
+# Не рабочий вариант полностью пропадают стили при сохранении HTML -> DOCX
+@app.post("/api/save-docx")
+async def save_docx(request: Request):
+    try:
+        data = await request.json()
+        html = data.get("html")
+        original_path = data.get("original_path")
+
+        if not html:
+            return JSONResponse(status_code=400, content={"detail": "Пустой HTML"})
+
+        soup = BeautifulSoup(html, "html.parser")
+        plain_text = soup.get_text(separator="\n")
+
+        doc = Document()
+        for line in plain_text.splitlines():
+            doc.add_paragraph(line)
+
+        filename = os.path.basename(original_path or "edited.docx")
+        save_path = os.path.join("converted_files", filename)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        doc.save(save_path)
+
+        print(f"[SAVE] Документ сохранён: {save_path}")
+        return JSONResponse({"status": "saved", "path": save_path})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"detail": f"Ошибка сервера: {str(e)}"})

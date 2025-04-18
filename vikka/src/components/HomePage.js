@@ -134,7 +134,7 @@ const HomePage = () => {
       
       const result = await response.json();
       navigate('/editor', { state: { 
-        pdfPath: result.pdf_path,
+        fullDocxPath: result.full_docx_path,
         templateTitle: selectedTemplate.title
       }});
     } catch (error) {

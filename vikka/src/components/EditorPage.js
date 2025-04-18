@@ -1,5 +1,6 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { renderAsync } from "docx-preview";
 import "bootstrap/dist/css/bootstrap.min.css";
 import infoIcon from '../icons/info.svg';
 import templatesIcon from '../icons/templates.svg';
@@ -17,13 +18,135 @@ const EditorPage = () => {
     const navigate = useNavigate();
     const [pdfUrl, setPdfUrl] = useState(null);
     const [documentTitle, setDocumentTitle] = useState("Название документа");
+    const [isEditable, setIsEditable] = useState(false);
 
+    const [docxPath, setDocxPath] = useState(null);
+    const docxContainerRef = useRef(null);
+
+    /* useEffect(() => {
+        if (location.state) {
+            setDocxPath(location.state.docxPath || "/public/template.docx");
+            setDocumentTitle(location.state.templateTitle || "Название документа");
+        }
+    }, [location.state]); */
+
+    /* useEffect(() => {
+        const testPath = "/1.docx";
+    
+        fetch(testPath)
+            .then(res => res.arrayBuffer())
+            .then(blob => {
+                renderAsync(blob, docxContainerRef.current, null, {
+                    className: "docx",
+                    inWrapper: true,
+                }).then(() => {
+                    replacePlaceholders();
+                });
+            })
+            .catch(err => {
+                console.error("Ошибка загрузки тестового документа:", err);
+            });
+    }, []); */
     useEffect(() => {
+        const loadDocxFromServer = async () => {
+            try {
+                let fullPath = location.state?.fullDocxPath;
+
+    
+                if (!fullPath) {
+                    console.error("Не передан путь к документу");
+                    return;
+                }
+
+                fullPath = fullPath.replace(/\\/g, "/");
+
+                if (!fullPath.startsWith("http")) {
+                    fullPath = `http://localhost:8000/${fullPath}`;
+                }
+    
+                const res = await fetch(fullPath);
+                const blob = await res.arrayBuffer();
+    
+                await renderAsync(blob, docxContainerRef.current, null, {
+                    className: "docx",
+                    inWrapper: true,
+                });
+    
+                replacePlaceholders(); // вставка полей
+            } catch (error) {
+                console.error("Ошибка загрузки документа:", error);
+            }
+        };
+    
+        loadDocxFromServer();
+    }, []);
+
+    const replacePlaceholders = () => {
+        const container = docxContainerRef.current;
+
+        if (!container) return;
+
+        const replacements = {
+            "{contract_number}": `<select class="placeholder" data-key="contract_number">
+                <option value="123">123</option>
+                <option value="456">456</option>
+                <option value="789">789</option>
+            </select>`,
+        };
+
+        Object.entries(replacements).forEach(([key, html]) => {
+                container.innerHTML = container.innerHTML.replaceAll(key, html);
+        });
+    };
+
+    /* useEffect(() => {
         if (location.state) {
             setPdfUrl(location.state.pdfPath);
             setDocumentTitle(location.state.templateTitle || "Название документа");
         }
-    }, [location.state]);
+    }, [location.state]); */
+
+    const toggleEditMode = () => {
+        setIsEditable(prev => !prev);
+    };
+
+    /* const handleSave = () => {
+        if (docxContainerRef.current) {
+            const content = docxContainerRef.current.innerHTML;
+            console.log("Сохранённый контент:", content);
+    
+            alert("Изменения сохранены!");
+        }
+    }; */
+
+    const handleSave = async () => {
+        if (docxContainerRef.current) {
+            const htmlContent = docxContainerRef.current.innerHTML;
+    
+            try {
+                const response = await fetch("http://localhost:8000/api/save-docx", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        html: htmlContent,
+                        original_path: location.state?.fullDocxPath || null,
+                    }),
+                });
+    
+                if (!response.ok) {
+                    throw new Error("Ошибка при сохранении документа");
+                }
+    
+                alert("Изменения сохранены!");
+            } catch (err) {
+                console.error("Ошибка сохранения:", err);
+                alert("Не удалось сохранить изменения");
+            }
+        }
+    };
+    
 
     const handleDownload = () => {
         if (pdfUrl) {
@@ -41,6 +164,7 @@ const EditorPage = () => {
             window.open(pdfUrl, '_blank').print();
         }
     };
+
     return (
       <div className="editor-page-container">
         {/* Хедер */}
@@ -104,37 +228,37 @@ const EditorPage = () => {
                 </div>
 
                 {/* Контейнер для Word-документа */}
-                <div className="editor-document d-flex justify-content-center align-items-center">
-                    {pdfUrl ? (
-                            <iframe
-                                src={`http://localhost:8000${pdfUrl}#zoom=97&toolbar=0&navpanes=0&scrollbar=0`}
-                                title="Документ"
-                                className="document-frame a4-frame"
-                                
-                            />
-                        ) : (
-                            <div className="d-flex justify-content-center align-items-center" style={{ height: '800px' }}>
-                                <div className="spinner-border text-primary" role="status">
-                                    <span className="visually-hidden">Загрузка...</span>
-                                </div>
-                            </div>
-                    )}
-
-                    {/* <iframe
-                        src="C:\Users\andre\Desktop\templates\asdd.docx"
-                        title="Документ"
-                        className="document-frame a4-frame"
-                    ></iframe> */}
+                <div class="docx-container">
+                    <div
+                        ref={docxContainerRef}
+                        contentEditable={isEditable}
+                        suppressContentEditableWarning={true}
+                        className="docx-container"
+                        style={{
+                            outline: "none",
+                            zIndex: 1
+                        }}
+                    ></div>
                 </div>
 
                 {/* Правое меню */}
                 <div className="editor-actions text-white d-flex flex-column align-items-center p-3 ms-4">
-                    {/* <div className="menu-icon white-icon mb-3">
-                        <img src={editIcon}/>
+                    <div
+                        className={`menu-icon white-icon mb-3 ${isEditable ? "active-icon" : ""}`}
+                        onClick={toggleEditMode}
+                        title="Редактировать"
+                        style={{ cursor: "pointer" }}
+                    >
+                        <img src={editIcon} />
                     </div>
-                    <div className="menu-icon text-white mb-3">
-                        <img src={saveIcon}/>
-                    </div> */}
+                    <div
+                        className="menu-icon text-white mb-3"
+                        onClick={handleSave}
+                        style={{ cursor: "pointer" }}
+                        title="Сохранить изменения"
+                    >
+                        <img src={saveIcon} />
+                    </div>
                     <div className="menu-icon text-white mb-3">
                         <img src={downloadIcon}/>
                     </div>
