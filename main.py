@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,12 +7,19 @@ from typing import List
 from bs4 import BeautifulSoup
 from docx import Document
 import os
+import hashlib
+import requests
+import aiohttp
+import jwt
 import time
 from pathlib import Path
 import docx2pdf
 from parser import main
 
 app = FastAPI()
+
+JWT_SECRET = "lD7DsO0mFVWgt4isJNuY7IcM8fUWwrAh"
+JWT_ALGORITHM = "HS256"
 
 app.add_middleware(
     CORSMiddleware,
@@ -121,9 +128,98 @@ async def process_document(request: Request):
         error_msg = f"Непредвиденная ошибка: {str(e)}"
         print(f"[CRITICAL ERROR] {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
+    
+@app.get("/onlyoffice/editor-config")
+async def get_editor_config(file_name: str):
+    file_name = os.path.basename(file_name)
+    file_path = os.path.join("converted_files", file_name)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+
+    file_url = f"http://host.docker.internal:8000/converted_files/{file_name}"
+    print(file_url)
+    # Уникальный ключ по имени файла (для OnlyOffice)
+    doc_key = hashlib.md5((file_name + str(os.path.getmtime(file_path))).encode()).hexdigest()
+
+    payload = {
+        "document": {
+            "fileType": "docx",
+            "key": doc_key,
+            "title": file_name,
+            "url": file_url,
+        },
+        "editorConfig": {
+            "callbackUrl": f"http://host.docker.internal:8000/onlyoffice/callback?file={file_name}",
+            "mode": "edit",
+            "user": {
+                "id": "1",
+                "name": "Ксения Гараева"
+            }
+        }
+    }
+
+    """ token = jwt.encode(config, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    config["token"] = token """
+
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+    config = {
+        **payload,
+        "token": token
+    }
+
+    return JSONResponse(content=config)
+
+@app.post("/onlyoffice/callback")
+async def onlyoffice_callback(request: Request, file: str = Query(...)):
+    body = await request.json()
+    status = body.get("status")
+
+    # Сохраняем файл только если статус 2 (закрыт) или 6 (форс сохранение)
+    if status in [2, 6]:
+        download_url = body.get("url")
+        if not download_url:
+            return JSONResponse({"error": "No download URL"}, status_code=400)
+
+        save_path = os.path.join("converted_files", os.path.basename(file))
+        print(save_path)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(download_url) as resp:
+                    if resp.status == 200:
+                        with open(save_path, "wb") as f:
+                            f.write(await resp.read())
+                    else:
+                        return JSONResponse({"error": "Failed to download edited file"}, status_code=500)
+
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    return JSONResponse({"error": 0})
+
+""" @app.post("/onlyoffice/callback")
+async def onlyoffice_callback(request: Request, file: str):
+    data = await request.json()
+    print(f"[OnlyOffice Callback] Получены данные: {data}")
+
+    # Статус 2 — документ готов к сохранению
+    if data.get("status") == 2 and "url" in data:
+        download_url = data["url"]
+        try:
+            response = requests.get(download_url)
+            save_path = os.path.join("converted_files", file)
+            with open(save_path, "wb") as f:
+                f.write(response.content)
+            print(f"[OnlyOffice Callback] Файл сохранён: {save_path}")
+        except Exception as e:
+            print(f"[OnlyOffice Callback] Ошибка при загрузке: {e}")
+            raise HTTPException(status_code=500, detail="Не удалось сохранить изменения")
+    
+    return JSONResponse(content={"error": 0}) """
 
 # Не рабочий вариант полностью пропадают стили при сохранении HTML -> DOCX
-@app.post("/api/save-docx")
+""" @app.post("/api/save-docx")
 async def save_docx(request: Request):
     try:
         data = await request.json()
@@ -148,4 +244,4 @@ async def save_docx(request: Request):
         print(f"[SAVE] Документ сохранён: {save_path}")
         return JSONResponse({"status": "saved", "path": save_path})
     except Exception as e:
-        return JSONResponse(status_code=500, content={"detail": f"Ошибка сервера: {str(e)}"})
+        return JSONResponse(status_code=500, content={"detail": f"Ошибка сервера: {str(e)}"}) """

@@ -20,6 +20,10 @@ const EditorPage = () => {
     const [documentTitle, setDocumentTitle] = useState("Название документа");
     const [isEditable, setIsEditable] = useState(false);
 
+    const [fileName, setFileName] = useState(null);
+    const [editorConfig, setEditorConfig] = useState(null);
+
+
     const [docxPath, setDocxPath] = useState(null);
     const docxContainerRef = useRef(null);
 
@@ -47,7 +51,34 @@ const EditorPage = () => {
                 console.error("Ошибка загрузки тестового документа:", err);
             });
     }, []); */
+
     useEffect(() => {
+        const fetchEditorConfig = async () => {
+            let fullPath = location.state?.fullDocxPath;
+            console.log(fullPath)
+            if (!fullPath) {
+                console.error("Путь к документу не передан");
+                return;
+            }
+    
+            const segments = fullPath.split("/");
+            const name = segments[segments.length - 1];
+            setFileName(name);
+    
+            try {
+                const res = await fetch(`http://localhost:8000/onlyoffice/editor-config?file_name=${name}`);
+                const data = await res.json();
+                console.log("Получены данные конфигурации OnlyOffice:", data);
+                setEditorConfig(data);
+            } catch (err) {
+                console.error("Ошибка получения конфигурации OnlyOffice:", err);
+            }
+        };
+    
+        fetchEditorConfig();
+    }, []);
+
+    /* useEffect(() => {
         const loadDocxFromServer = async () => {
             try {
                 let fullPath = location.state?.fullDocxPath;
@@ -79,9 +110,9 @@ const EditorPage = () => {
         };
     
         loadDocxFromServer();
-    }, []);
+    }, []); */
 
-    const replacePlaceholders = () => {
+    /* const replacePlaceholders = () => {
         const container = docxContainerRef.current;
 
         if (!container) return;
@@ -97,7 +128,7 @@ const EditorPage = () => {
         Object.entries(replacements).forEach(([key, html]) => {
                 container.innerHTML = container.innerHTML.replaceAll(key, html);
         });
-    };
+    }; */
 
     /* useEffect(() => {
         if (location.state) {
@@ -228,7 +259,34 @@ const EditorPage = () => {
                 </div>
 
                 {/* Контейнер для Word-документа */}
-                <div class="docx-container">
+
+                {/* {
+                    editorConfig && fileName && (
+                        <iframe
+                            title="OnlyOffice Editor"
+                            src={`http://localhost:8001/web-apps/apps/documenteditor/main/index.html?fileExt=docx&key=${editorConfig.document.key}&title=${fileName}&url=${encodeURIComponent(editorConfig.document.url)}&callbackUrl=${encodeURIComponent(editorConfig.editorConfig.callbackUrl)}`}
+                            width="100%"
+                            height="800px"
+                            frameBorder="0"
+                            allowFullScreen
+                        />
+                    )
+                }
+ */}
+                {
+                    editorConfig && (
+                        <iframe
+                            src={`http://localhost:3000/onlyoffice-wrapper.html?config=${encodeURIComponent(JSON.stringify(editorConfig))}`}
+                            width="100%"
+                            height="1400px"
+                            frameBorder="0"
+                            allowFullScreen
+                        />
+                    )
+                }
+                
+
+                {/* <div class="docx-container">
                     <div
                         ref={docxContainerRef}
                         contentEditable={isEditable}
@@ -239,7 +297,7 @@ const EditorPage = () => {
                             zIndex: 1
                         }}
                     ></div>
-                </div>
+                </div> */}
 
                 {/* Правое меню */}
                 <div className="editor-actions text-white d-flex flex-column align-items-center p-3 ms-4">
