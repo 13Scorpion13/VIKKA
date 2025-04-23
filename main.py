@@ -7,9 +7,10 @@ from typing import List
 from bs4 import BeautifulSoup
 from docx import Document
 import os
+import re
+from datetime import datetime
 import time
 from pathlib import Path
-import docx2pdf
 from parser import main
 
 app = FastAPI()
@@ -82,32 +83,6 @@ async def process_document(request: Request):
 
         full_docx_path = main(docx_path)
         print(f"[2/6] Обработанный путь: {full_docx_path}")
-
-        """ if not os.path.exists(full_docx_path):
-            error_msg = f"Файл {full_docx_path} не найден после обработки"
-            print(f"[ERROR] {error_msg}")
-            raise HTTPException(status_code=404, detail=error_msg)
-        
-        print(f"[3/6] DOCX файл существует: {os.path.getsize(full_docx_path)} байт")
-
-        os.makedirs("converted_files", exist_ok=True)
-        pdf_filename = os.path.basename(full_docx_path).replace('.docx', '.pdf')
-        pdf_path = os.path.join("converted_files", pdf_filename)
-        print(f"[4/6] Целевой PDF путь: {pdf_path}")
-
-        try:
-            print("[5/6] Начало конвертации...")
-            docx2pdf.convert(full_docx_path, pdf_path)
-            
-            if not os.path.exists(pdf_path):
-                raise Exception("PDF не появился после конвертации")
-                
-            print(f"[6/6] Конвертация успешна! Размер PDF: {os.path.getsize(pdf_path)} байт")
-            
-        except Exception as conv_error:
-            error_msg = f"Ошибка конвертации: {str(conv_error)}"
-            print(f"[ERROR] {error_msg}")
-            raise HTTPException(status_code=500, detail=error_msg) """
         
         # 6. Возвращаем результат
         return JSONResponse({
@@ -123,7 +98,7 @@ async def process_document(request: Request):
         raise HTTPException(status_code=500, detail=error_msg)
 
 # Не рабочий вариант полностью пропадают стили при сохранении HTML -> DOCX
-@app.post("/api/save-docx")
+""" @app.post("/api/save-docx")
 async def save_docx(request: Request):
     try:
         data = await request.json()
@@ -148,4 +123,69 @@ async def save_docx(request: Request):
         print(f"[SAVE] Документ сохранён: {save_path}")
         return JSONResponse({"status": "saved", "path": save_path})
     except Exception as e:
-        return JSONResponse(status_code=500, content={"detail": f"Ошибка сервера: {str(e)}"})
+        return JSONResponse(status_code=500, content={"detail": f"Ошибка сервера: {str(e)}"}) """
+    
+@app.post("/api/extract-fields")
+async def extract_fields(request: Request):
+    """Извлекает поля вида {field_name} из DOCX."""
+    try:
+        data = await request.json()
+        docx_path = data.get("docx_path")
+        
+        if not docx_path:
+            raise HTTPException(status_code=400, detail="Не указан путь к документу")
+        
+        doc = Document(docx_path)
+        fields = set()
+        
+        # Ищем поля в тексте и таблицах
+        for paragraph in doc.paragraphs:
+            matches = re.findall(r"\{(\w+)\}", paragraph.text)
+            fields.update(matches)
+        
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    matches = re.findall(r"\{(\w+)\}", cell.text)
+                    fields.update(matches)
+        
+        return {"fields": list(fields)}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при извлечении полей: {str(e)}")
+    
+@app.post("/api/replace-fields")
+async def replace_fields(request: Request):
+    """Заменяет {field_name} в DOCX на значения из запроса."""
+    try:
+        data = await request.json()
+        docx_path = data.get("docx_path")
+        fields_data = data.get("fields_data", {})
+        
+        if not docx_path:
+            raise HTTPException(status_code=400, detail="Не указан путь к документу")
+        
+        doc = Document(docx_path)
+        
+        # Заменяем поля в тексте
+        for paragraph in doc.paragraphs:
+            for field, value in fields_data.items():
+                if f"{{{field}}}" in paragraph.text:
+                    paragraph.text = paragraph.text.replace(f"{{{field}}}", str(value))
+        
+        # Заменяем поля в таблицах
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for field, value in fields_data.items():
+                        if f"{{{field}}}" in cell.text:
+                            cell.text = cell.text.replace(f"{{{field}}}", str(value))
+        
+        # Сохраняем новый файл
+        output_path = f"converted_files/processed_{datetime.now().timestamp()}.docx"
+        doc.save(output_path)
+        
+        return {"processed_docx_path": output_path}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при замене полей: {str(e)}")

@@ -16,43 +16,18 @@ import "./Header.css";
 const EditorPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const [pdfUrl, setPdfUrl] = useState(null);
     const [documentTitle, setDocumentTitle] = useState("Название документа");
     const [isEditable, setIsEditable] = useState(false);
+    const [fields, setFields] = useState([]); // Поля вида {field_name}
+    const [fieldValues, setFieldValues] = useState({}); // Значения полей
 
-    const [docxPath, setDocxPath] = useState(null);
     const docxContainerRef = useRef(null);
 
-    /* useEffect(() => {
-        if (location.state) {
-            setDocxPath(location.state.docxPath || "/public/template.docx");
-            setDocumentTitle(location.state.templateTitle || "Название документа");
-        }
-    }, [location.state]); */
-
-    /* useEffect(() => {
-        const testPath = "/1.docx";
-    
-        fetch(testPath)
-            .then(res => res.arrayBuffer())
-            .then(blob => {
-                renderAsync(blob, docxContainerRef.current, null, {
-                    className: "docx",
-                    inWrapper: true,
-                }).then(() => {
-                    replacePlaceholders();
-                });
-            })
-            .catch(err => {
-                console.error("Ошибка загрузки тестового документа:", err);
-            });
-    }, []); */
     useEffect(() => {
-        const loadDocxFromServer = async () => {
+        const loadDocxAndExtractFields = async () => {
             try {
                 let fullPath = location.state?.fullDocxPath;
 
-    
                 if (!fullPath) {
                     console.error("Не передан путь к документу");
                     return;
@@ -63,61 +38,102 @@ const EditorPage = () => {
                 if (!fullPath.startsWith("http")) {
                     fullPath = `http://localhost:8000/${fullPath}`;
                 }
-    
+
+                // 1. Загружаем DOCX для превью
                 const res = await fetch(fullPath);
                 const blob = await res.arrayBuffer();
-    
                 await renderAsync(blob, docxContainerRef.current, null, {
                     className: "docx",
                     inWrapper: true,
                 });
-    
-                replacePlaceholders(); // вставка полей
+
+                // 2. Извлекаем поля через бэкенд
+                const backendPath = fullPath.replace("http://localhost:8000/", "");
+                const fieldsResponse = await fetch("http://localhost:8000/api/extract-fields", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ docx_path: backendPath }),
+                });
+                const { fields } = await fieldsResponse.json();
+                setFields(fields);
+
+                // Инициализируем значения полей
+                const initialValues = {};
+                fields.forEach(field => {
+                    initialValues[field] = "";
+                });
+                setFieldValues(initialValues);
+
             } catch (error) {
-                console.error("Ошибка загрузки документа:", error);
+                console.error("Ошибка:", error);
             }
         };
-    
-        loadDocxFromServer();
+
+        loadDocxAndExtractFields();
     }, []);
 
-    const replacePlaceholders = () => {
+    useEffect(() => {
+        if (!isEditable || !docxContainerRef.current) return;
+
         const container = docxContainerRef.current;
+        let html = container.innerHTML;
 
-        if (!container) return;
-
-        const replacements = {
-            "{contract_number}": `<select class="placeholder" data-key="contract_number">
-                <option value="123">123</option>
-                <option value="456">456</option>
-                <option value="789">789</option>
-            </select>`,
-        };
-
-        Object.entries(replacements).forEach(([key, html]) => {
-                container.innerHTML = container.innerHTML.replaceAll(key, html);
+        fields.forEach(field => {
+            const value = fieldValues[field] || "";
+            html = html.replace(
+                new RegExp(`\\{${field}\\}`, "g"),
+                `<input 
+                    type="text" 
+                    class="docx-field" 
+                    data-field="${field}" 
+                    value="${value}"
+                    style="border: 1px solid #ccc; padding: 2px; width: 90px;"
+                />`
+            );
         });
-    };
 
-    /* useEffect(() => {
-        if (location.state) {
-            setPdfUrl(location.state.pdfPath);
-            setDocumentTitle(location.state.templateTitle || "Название документа");
+        container.innerHTML = html;
+
+        // Добавляем обработчики изменений
+        container.querySelectorAll(".docx-field").forEach(input => {
+            input.addEventListener("change", (e) => {
+                const field = e.target.dataset.field;
+                setFieldValues(prev => ({
+                    ...prev,
+                    [field]: e.target.value,
+                }));
+            });
+        });
+    }, [isEditable, fields, fieldValues]);
+
+    // Генерация документа с заменёнными полями
+    const handleGenerateDocument = async () => {
+        try {
+            const backendPath = location.state?.fullDocxPath.replace(/\\/g, "/").replace("http://localhost:8000/", "");
+            
+            const response = await fetch("http://localhost:8000/api/replace-fields", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    docx_path: backendPath,
+                    fields_data: fieldValues,
+                }),
+            });
+
+            const { processed_docx_path } = await response.json();
+            alert(`Документ сохранён: ${processed_docx_path}`);
+            
+            // Можно добавить скачивание:
+            window.open(`http://localhost:8000/${processed_docx_path}`);
+
+        } catch (error) {
+            console.error("Ошибка генерации документа:", error);
         }
-    }, [location.state]); */
+    };
 
     const toggleEditMode = () => {
         setIsEditable(prev => !prev);
     };
-
-    /* const handleSave = () => {
-        if (docxContainerRef.current) {
-            const content = docxContainerRef.current.innerHTML;
-            console.log("Сохранённый контент:", content);
-    
-            alert("Изменения сохранены!");
-        }
-    }; */
 
     const handleSave = async () => {
         if (docxContainerRef.current) {
@@ -147,23 +163,6 @@ const EditorPage = () => {
         }
     };
     
-
-    const handleDownload = () => {
-        if (pdfUrl) {
-            const link = document.createElement('a');
-            link.href = pdfUrl;
-            link.download = `${documentTitle}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    };
-
-    const handlePrint = () => {
-        if (pdfUrl) {
-            window.open(pdfUrl, '_blank').print();
-        }
-    };
 
     return (
       <div className="editor-page-container">
@@ -231,8 +230,6 @@ const EditorPage = () => {
                 <div class="docx-container">
                     <div
                         ref={docxContainerRef}
-                        contentEditable={isEditable}
-                        suppressContentEditableWarning={true}
                         className="docx-container"
                         style={{
                             outline: "none",
@@ -243,31 +240,52 @@ const EditorPage = () => {
 
                 {/* Правое меню */}
                 <div className="editor-actions text-white d-flex flex-column align-items-center p-3 ms-4">
-                    <div
-                        className={`menu-icon white-icon mb-3 ${isEditable ? "active-icon" : ""}`}
-                        onClick={toggleEditMode}
-                        title="Редактировать"
-                        style={{ cursor: "pointer" }}
+                    {/* Кнопка редактирования/просмотра */}
+                    <button
+                        className={`menu-icon white-icon mb-3 ${isEditable ? '' : ''}`}
+                        onClick={() => setIsEditable(!isEditable)}
+                        title={isEditable ? "Предпросмотр" : "Редактировать"}
                     >
-                        <img src={editIcon} />
-                    </div>
-                    <div
+                        <img src={editIcon} alt="Редактировать" />
+                    </button>
+
+                    {/* Кнопка сохранения (видна только в режиме редактирования) */}
+                    {isEditable && (
+                        <button
+                            className="menu-icon text-white mb-3"
+                            onClick={handleGenerateDocument}
+                            title="Сохранить изменения"
+                        >
+                            <img src={saveIcon} alt="Сохранить" />
+                        </button>
+                    )}
+
+                    {/* Кнопка скачивания */}
+                    <button
                         className="menu-icon text-white mb-3"
-                        onClick={handleSave}
-                        style={{ cursor: "pointer" }}
-                        title="Сохранить изменения"
+                        onClick={() => window.open(`http://localhost:8000/${location.state?.fullDocxPath}`)}
+                        title="Скачать DOCX"
                     >
-                        <img src={saveIcon} />
-                    </div>
-                    <div className="menu-icon text-white mb-3">
-                        <img src={downloadIcon}/>
-                    </div>
-                    <div className="menu-icon text-white mb-3">
-                        <img src={sendIcon}/>
-                    </div>
-                    <div className="menu-icon text-white mb-3">
-                        <img src={printIcon}/>
-                    </div>
+                        <img src={downloadIcon} alt="Скачать" />
+                    </button>
+
+                    {/* Кнопка отправки */}
+                    <button
+                        className="menu-icon text-white mb-3"
+                        onClick={() => alert("Функция отправки в разработке")}
+                        title="Отправить"
+                    >
+                        <img src={sendIcon} alt="Отправить" />
+                    </button>
+
+                    {/* Кнопка печати */}
+                    <button
+                        className="menu-icon text-white mb-3"
+                        onClick={() => window.print()}
+                        title="Печать"
+                    >
+                        <img src={printIcon} alt="Печать" />
+                    </button>
                 </div>
             </div>
         </section>

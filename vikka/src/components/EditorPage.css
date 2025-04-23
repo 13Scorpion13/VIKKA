@@ -49,6 +49,8 @@
 }
   
 .menu-icon {
+    background: none;
+    border: none;
     font-size: 24px;
     cursor: pointer;
     transition: transform 0.2s ease;
@@ -58,13 +60,10 @@
     transform: scale(1.1);
 }
 
-/* .a4-frame {
-    width: 794px;
-    height: 1123px;
-    border: none;
-    background: white;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-} */
+.menu-icon img {
+    width: 30px;
+    height: 30px;
+}
   
 .white-icon {
     color: white;
