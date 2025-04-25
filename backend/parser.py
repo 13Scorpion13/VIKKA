@@ -462,6 +462,7 @@ def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folde
     })
 
     pdf_files = []
+    pdf_folder_path = "./pdfs"
     for root, _, files in os.walk(pdf_folder_path):
         pdf_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.pdf')])
     
@@ -484,9 +485,9 @@ def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folde
     }
     docx_processor.add_db_data(db_data)
 
-    template_path = f"C:/Users/andre/Desktop/VIKKA{docx_path}"
+    template_path = f"static/{docx_path}"
     print(template_path)
-    output_path = r"converted_files\template.docx"
+    output_path = r"static\converted_files\template.docx"
     docx_processor.process_template(template_path, output_path)
     print(f"\nДокумент сохранен как {output_path}")
     return output_path

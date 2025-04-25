@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: /vikka/Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./static:/app/static
+    networks:
+      - vikka_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: /backend/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./static:/app/static
+      - C:/Users/user/Desktop/132/Test:/app/pdfs
+    networks:
+      - vikka_network
+  
+  # db:
+  #   image: postgres
+  #   environment:
+  #     POSTGRES_USER: ${DB_USER}
+  #     POSTGRES_PASSWORD: ${DB_PASS}
+  #     POSTGRES_DB: ${DB_NAME}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - vikka_network
+
+  # migrate:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.migrate
+  #   working_dir: /app
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - db
+  #   networks:
+  #     - vikka_network
+
+# volumes:
+#   postgres_data:
+
+networks:
+  vikka_network:
+    driver: bridge

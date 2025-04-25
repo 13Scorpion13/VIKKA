@@ -23,8 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/preview", StaticFiles(directory="preview"), name="preview")
-app.mount("/converted_files", StaticFiles(directory="converted_files"), name="converted_files")
+app.mount("/static/preview", StaticFiles(directory="./static/preview"), name="preview")
+app.mount("/static/converted_files", StaticFiles(directory="./static/converted_files"), name="converted_files")
+app.mount("/static/templates", StaticFiles(directory="./static/templates"), name="templates")
 
 class Template(BaseModel):
     id: int
@@ -34,20 +35,20 @@ class Template(BaseModel):
     last_modified: str = None
 
 templates_db = [
-    {"id": 1, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 2, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 3, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 4, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 5, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 6, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 7, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 8, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 9, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 10, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 11, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 12, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 13, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 14, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 1, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 2, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template1.docx", "last_modified": "5 минут назад"},
+    {"id": 3, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 4, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 5, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 6, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 7, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 8, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 9, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 10, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 11, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 12, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 13, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 14, "title": "О представлении ", "preview_image": "preview/image2.png", "document_path": "templates/template.docx", "last_modified": "5 минут назад"},
 ]
 
 @app.get("/api/templates/recent", response_model=List[Template])
@@ -65,6 +66,7 @@ async def search_templates(query: str):
 @app.get("/images/{image_path:path}")
 async def get_image(image_path: str):
     image_full_path = os.path.join("static", image_path)
+    print(image_full_path)
     if not os.path.exists(image_full_path):
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(image_full_path)

@@ -233,7 +233,7 @@ const HomePage = () => {
                   >
                     <div className="template-card shadow">
                       <img 
-                        src={`http://localhost:8000/preview/${tpl.preview_image}`}
+                        src={`http://localhost:8000/static/${tpl.preview_image}`}
                         alt={tpl.title}
                         className="img-fluid template-preview"
                         onError={(e) => e.target.src = '/placeholder.png'}
@@ -317,7 +317,7 @@ const HomePage = () => {
                 >
                   <div className="template-card shadow">
                     <img 
-                      src={`http://localhost:8000/preview/${tpl.preview_image}`}
+                      src={`http://localhost:8000/static/${tpl.preview_image}`}
                       alt={tpl.title}
                       className="img-fluid template-preview"
                       onError={(e) => e.target.src = '/placeholder.png'}
