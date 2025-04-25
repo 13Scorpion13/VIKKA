@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from "react";
+import React, {useEffect, useRef, useState, useMemo} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { renderAsync } from "docx-preview";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -18,10 +18,40 @@ const EditorPage = () => {
     const navigate = useNavigate();
     const [documentTitle, setDocumentTitle] = useState("Название документа");
     const [isEditable, setIsEditable] = useState(false);
-    const [fields, setFields] = useState([]); // Поля вида {field_name}
-    const [fieldValues, setFieldValues] = useState({}); // Значения полей
+    const [fields, setFields] = useState([]);
+    const [fieldValues, setFieldValues] = useState({});
+
+    const [setHasUnsavedChanges] = useState(false);
+    const [initialFieldValues, setInitialFieldValues] = useState({});
+    const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
 
     const docxContainerRef = useRef(null);
+
+    const hasUnsavedChanges = useMemo(() => {
+        return Object.keys(fieldValues).some(key => {
+            return fieldValues[key] !== initialFieldValues[key];
+        });
+    }, [fieldValues, initialFieldValues]);
+
+    const UnsavedChangesModal = ({ onConfirm, onCancel }) => {
+        return (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <h3>Внимание!</h3>
+              <p>Вы не сохранили внесенные изменения!</p>
+              <p>Выйти без сохранения?</p>
+              <div className="modal-buttons">
+                <button className="btn btn-danger" onClick={onConfirm}>
+                  Да, выйти
+                </button>
+                <button className="btn btn-secondary" onClick={onCancel}>
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+    };
 
     useEffect(() => {
         const loadDocxAndExtractFields = async () => {
@@ -47,7 +77,6 @@ const EditorPage = () => {
                     inWrapper: true,
                 });
 
-                // 2. Извлекаем поля через бэкенд
                 const backendPath = fullPath.replace("http://localhost:8000/", "");
                 const fieldsResponse = await fetch("http://localhost:8000/api/extract-fields", {
                     method: "POST",
@@ -57,7 +86,6 @@ const EditorPage = () => {
                 const { fields } = await fieldsResponse.json();
                 setFields(fields);
 
-                // Инициализируем значения полей
                 const initialValues = {};
                 fields.forEach(field => {
                     initialValues[field] = "";
@@ -73,10 +101,33 @@ const EditorPage = () => {
     }, []);
 
     useEffect(() => {
+        if (fields.length > 0) {
+            const initialValues = {};
+            fields.forEach(field => {
+                initialValues[field] = fieldValues[field] || "";
+            });
+            setInitialFieldValues(initialValues);
+        }
+    }, [fields]);
+
+    useEffect(() => {
         if (!isEditable || !docxContainerRef.current) return;
 
         const container = docxContainerRef.current;
         let html = container.innerHTML;
+
+        container.querySelectorAll(".docx-field").forEach(input => {
+            input.addEventListener("input", (e) => {
+                const field = e.target.dataset.field;
+                setFieldValues(prev => {
+                    const newValue = e.target.value;
+                    if (prev[field] !== newValue) {
+                        setHasUnsavedChanges(true);
+                    }
+                    return {...prev, [field]: newValue};
+                });
+            });
+        });
 
         fields.forEach(field => {
             const value = fieldValues[field] || "";
@@ -87,16 +138,15 @@ const EditorPage = () => {
                     class="docx-field" 
                     data-field="${field}" 
                     value="${value}"
-                    style="border: 1px solid #ccc; padding: 2px; width: 90px;"
+                    style="border: 1px solid #ccc; padding: 0px; width: 90px;"
                 />`
             );
         });
 
         container.innerHTML = html;
 
-        // Добавляем обработчики изменений
         container.querySelectorAll(".docx-field").forEach(input => {
-            input.addEventListener("change", (e) => {
+            input.addEventListener("input", (e) => {
                 const field = e.target.dataset.field;
                 setFieldValues(prev => ({
                     ...prev,
@@ -104,9 +154,8 @@ const EditorPage = () => {
                 }));
             });
         });
-    }, [isEditable, fields, fieldValues]);
+    }, [isEditable, fields]);
 
-    // Генерация документа с заменёнными полями
     const handleGenerateDocument = async () => {
         try {
             const backendPath = location.state?.fullDocxPath.replace(/\\/g, "/").replace("http://localhost:8000/", "");
@@ -119,20 +168,66 @@ const EditorPage = () => {
                     fields_data: fieldValues,
                 }),
             });
-
-            const { processed_docx_path } = await response.json();
-            alert(`Документ сохранён: ${processed_docx_path}`);
+    
+            const data = await response.json();
             
-            // Можно добавить скачивание:
-            window.open(`http://localhost:8000/${processed_docx_path}`);
+            if (!response.ok) {
+                throw new Error(data.message || "Ошибка сохранения");
+            }
 
+            if (response.ok) {
+                setInitialFieldValues({...fieldValues});
+                //setHasUnsavedChanges(false);
+                setShowUnsavedChangesModal(false);
+            }
+                
         } catch (error) {
-            console.error("Ошибка генерации документа:", error);
+            console.error("Ошибка сохранения:", error);
+            alert(`Ошибка: ${error.message}`);
         }
     };
 
-    const toggleEditMode = () => {
+    const toggleEditMode = async () => {
+        if (isEditable && hasUnsavedChanges) {
+            setShowUnsavedChangesModal(true);
+            return;
+        }
+
+        if (isEditable) {           
+            try {
+                const fullPath = location.state?.fullDocxPath.replace(/\\/g, "/");
+                const res = await fetch(fullPath.startsWith("http") ? fullPath : `http://localhost:8000/${fullPath}`);
+                const blob = await res.arrayBuffer();
+                await renderAsync(blob, docxContainerRef.current);
+            } catch (error) {
+                console.error("Ошибка загрузки документа:", error);
+            }
+        }
+        
         setIsEditable(prev => !prev);
+    };
+
+    const handleModalConfirm = async () => {
+        setShowUnsavedChangesModal(false);
+        setIsEditable(false);
+        setFieldValues({...initialFieldValues});
+        
+        try {
+          const fullPath = location.state?.fullDocxPath.replace(/\\/g, "/");
+          const res = await fetch(
+            fullPath.startsWith("http") 
+              ? fullPath 
+              : `http://localhost:8000/${fullPath}`
+          );
+          const blob = await res.arrayBuffer();
+          await renderAsync(blob, docxContainerRef.current);
+        } catch (error) {
+          console.error("Ошибка загрузки документа:", error);
+        }
+    };
+      
+    const handleModalCancel = () => {
+        setShowUnsavedChangesModal(false);
     };
 
     const handleSave = async () => {
@@ -242,11 +337,16 @@ const EditorPage = () => {
                 <div className="editor-actions text-white d-flex flex-column align-items-center p-3 ms-4">
                     {/* Кнопка редактирования/просмотра */}
                     <button
-                        className={`menu-icon white-icon mb-3 ${isEditable ? '' : ''}`}
-                        onClick={() => setIsEditable(!isEditable)}
+                        className={`menu-icon white-icon mb-3 ${isEditable ? 'active' : ''}`}
+                        onClick={toggleEditMode}
                         title={isEditable ? "Предпросмотр" : "Редактировать"}
                     >
-                        <img src={editIcon} alt="Редактировать" />
+                        <img src={editIcon} alt={isEditable ? "Предпросмотр" : "Редактировать"} />
+                        {hasUnsavedChanges && (
+                            <div className="unsaved-changes-indicator" title="Есть несохраненные изменения">
+                                <span className="unsaved-dot"></span>
+                            </div>
+                        )}
                     </button>
 
                     {/* Кнопка сохранения (видна только в режиме редактирования) */}
@@ -289,6 +389,12 @@ const EditorPage = () => {
                 </div>
             </div>
         </section>
+        {showUnsavedChangesModal && (
+            <UnsavedChangesModal
+                onConfirm={handleModalConfirm}
+                onCancel={handleModalCancel}
+            />
+        )}
       </div>
     );
   };

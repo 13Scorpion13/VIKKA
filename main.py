@@ -73,18 +73,32 @@ async def get_image(image_path: str):
 async def process_document(request: Request):
     try:
         data = await request.json()
+        print("Полученные данные:", data)
+
+        
+        contract_number = data.get("contract_number")
+        contract_date = data.get("contract_date")
+        recipient = data.get("recipient")
+        signer = data.get("signer")
+        pdf_folder_path = data.get("pdf_folder_path")
         docx_path = data.get("docx_path")
-        print(docx_path)
 
         if not docx_path:
             raise HTTPException(status_code=400, detail="Не указан путь к документу")
         
         print(f"[1/6] Получен путь к DOCX: {docx_path}")
 
-        full_docx_path = main(docx_path)
+        full_docx_path = main(
+            docx_path,
+            contract_number,
+            contract_date,
+            recipient,
+            signer,
+            pdf_folder_path
+        )
         print(f"[2/6] Обработанный путь: {full_docx_path}")
         
-        # 6. Возвращаем результат
+        
         return JSONResponse({
             "full_docx_path": full_docx_path,
             "status": "success"
@@ -96,34 +110,6 @@ async def process_document(request: Request):
         error_msg = f"Непредвиденная ошибка: {str(e)}"
         print(f"[CRITICAL ERROR] {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
-
-# Не рабочий вариант полностью пропадают стили при сохранении HTML -> DOCX
-""" @app.post("/api/save-docx")
-async def save_docx(request: Request):
-    try:
-        data = await request.json()
-        html = data.get("html")
-        original_path = data.get("original_path")
-
-        if not html:
-            return JSONResponse(status_code=400, content={"detail": "Пустой HTML"})
-
-        soup = BeautifulSoup(html, "html.parser")
-        plain_text = soup.get_text(separator="\n")
-
-        doc = Document()
-        for line in plain_text.splitlines():
-            doc.add_paragraph(line)
-
-        filename = os.path.basename(original_path or "edited.docx")
-        save_path = os.path.join("converted_files", filename)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        doc.save(save_path)
-
-        print(f"[SAVE] Документ сохранён: {save_path}")
-        return JSONResponse({"status": "saved", "path": save_path})
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"detail": f"Ошибка сервера: {str(e)}"}) """
     
 @app.post("/api/extract-fields")
 async def extract_fields(request: Request):
@@ -138,7 +124,7 @@ async def extract_fields(request: Request):
         doc = Document(docx_path)
         fields = set()
         
-        # Ищем поля в тексте и таблицах
+        
         for paragraph in doc.paragraphs:
             matches = re.findall(r"\{(\w+)\}", paragraph.text)
             fields.update(matches)
@@ -156,7 +142,6 @@ async def extract_fields(request: Request):
     
 @app.post("/api/replace-fields")
 async def replace_fields(request: Request):
-    """Заменяет {field_name} в DOCX на значения из запроса."""
     try:
         data = await request.json()
         docx_path = data.get("docx_path")
@@ -165,15 +150,18 @@ async def replace_fields(request: Request):
         if not docx_path:
             raise HTTPException(status_code=400, detail="Не указан путь к документу")
         
+        if not os.path.exists(docx_path):
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        
         doc = Document(docx_path)
         
-        # Заменяем поля в тексте
+
         for paragraph in doc.paragraphs:
             for field, value in fields_data.items():
                 if f"{{{field}}}" in paragraph.text:
                     paragraph.text = paragraph.text.replace(f"{{{field}}}", str(value))
         
-        # Заменяем поля в таблицах
+        
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -181,11 +169,11 @@ async def replace_fields(request: Request):
                         if f"{{{field}}}" in cell.text:
                             cell.text = cell.text.replace(f"{{{field}}}", str(value))
         
-        # Сохраняем новый файл
-        output_path = f"converted_files/processed_{datetime.now().timestamp()}.docx"
-        doc.save(output_path)
         
-        return {"processed_docx_path": output_path}
+        
+        doc.save(docx_path)
+        
+        return {"status": "success", "message": "Файл успешно обновлен", "file_path": docx_path}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при замене полей: {str(e)}")

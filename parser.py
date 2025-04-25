@@ -11,6 +11,29 @@ class PDFDataExtractor:
     def __init__(self):
         self.parsed_data = {}
         self.all_documents = []
+        self.frontend_data = {
+            'договор': {
+                'номер': '',
+                'дата': ''
+            },
+            'адресат': {
+                'фио': '',
+                'должность': ''
+            },
+            'подписант': {
+                'фио': '',
+                'должность': ''
+            },
+            'экземпляры': 1 
+        }
+
+    def set_frontend_data(self, contract_number: str, contract_date: str, addressee: dict, signer: dict, copies: int = 1):
+        """Устанавливает данные из фронтенда"""
+        self.frontend_data['договор']['номер'] = contract_number
+        self.frontend_data['договор']['дата'] = contract_date
+        self.frontend_data['адресат'] = addressee
+        self.frontend_data['подписант'] = signer
+        self.frontend_data['экземпляры'] = copies  
 
     def extract_text_from_pdf(self, pdf_path: str) -> tuple:
         with fitz.open(pdf_path) as doc:
@@ -125,11 +148,19 @@ class PDFDataExtractor:
         else:
             data = self.extract_sp_data(first_page, last_page, num_pages, pdf_path)
         
+        data.update({
+            'номердоговора': self.frontend_data['договор']['номер'],
+            'датадоговора': self.frontend_data['договор']['дата'],
+            'адресат': self.frontend_data['адресат'],
+            'подписант': self.frontend_data['подписант']
+        })
+
         self.all_documents.append(data)
         return data
 
     def generate_documents_list(self):
         ks_list = []
+        # sp_list = []
         fixed_item = "Электронная версия рабочей документации по проекту «Дооснащение подсистем безопасности кошек в обычной жизни ООО «Мяу мышь» на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э 459 от 26.03.2025(календарь), экз. № 1/1(человек должен задать отдельно для дисков и бумажной документации) только в адрес. "
         ks_list.append(fixed_item)
         
@@ -138,18 +169,29 @@ class PDFDataExtractor:
                 ks_entry = f"{doc['названиедокумента']}, Том 1, коммерческая тайна, Уч. № {doc['учетныйномер']} от {doc['датадокумента']}, экз. №№ {doc['экземпляры']} на {doc['количестволистов']} л. каждый, только в адрес."
                 ks_list.append(ks_entry)
             elif doc['типдокумента'] == 'СП':
-                sp_entry = f"{doc['названиедокумента']}, инв. № {doc['инвентарныйномер']} - на {doc['количествостраниц']} л. в 4 экз."
-                ks_list.append(sp_entry)
-
-        return ks_list
+                sp_entry = f"{doc['названиедокумента']}, инв. № {doc['инвентарныйномер']} - на {doc['количествостраниц']} л. в  {self.frontend_data['экземпляры']} экз."
+                ks_list.append(sp_entry)   #sp_list.append(sp_entry)
+        
+        # result = ""
+        # if ks_list:
+        #     result += "\r\n\r\n".join(ks_list)
+        # if sp_list:
+        #     result += "\r\n".join(sp_list)
+        
+        return ks_list #result
 
 class DocxTemplateProcessor:
     def __init__(self):
         self.data_sources = {
             'парсера': {},
             'бд': {},
-            'списокдокументов': ""
+            'списокдокументов': "",
+            'формы':{}
         }
+
+    def add_frontend_data(self, data: dict):
+        """Добавляет данные из фронтенда"""
+        self.data_sources['формы'] = data
 
     def add_parser_data(self, data: dict):
         """Добавляет данные из парсера."""
@@ -162,17 +204,20 @@ class DocxTemplateProcessor:
     def add_documents_list(self, documents_list: str):
         """Добавляет список документов."""
         self.data_sources['списокдокументов'] = documents_list
+
+    
         
     def process_template(self, template_path: str, output_path: str):
-        """Обрабатывает шаблон с выравниванием по ширине"""
-        print("qwetryrte")
+        """Обрабатывает шаблон с выравниванием по ширине и заданными отступами"""
         doc = Document(template_path)
-        print("sdfsdfsd")
-        LEFT_INDENT = 1065
-        HANGING_INDENT = 357
-        FIRST_LINE = -357
-        LINE_SPACING = 360
         
+        # Параметры в twips (1 см = 567 twips)
+        LEFT_INDENT = int(0.25 * 567)    # 0.25 см
+        FIRST_LINE_INDENT = int(1.0 * 567)  # 1.0 см
+        TAB_STOP_1 = int(1.75 * 567)      # 1.75 см (первая позиция табуляции)
+        LINE_SPACING = 360                # 1.5 строки
+        
+        # Ищем параграф с меткой {списокдокументов:}
         for paragraph in doc.paragraphs:
             if '{списокдокументов:}' in paragraph.text:
                 parent = paragraph._p.getparent()
@@ -182,6 +227,7 @@ class DocxTemplateProcessor:
                 for item in self.data_sources['списокдокументов']:
                     new_paragraph = OxmlElement('w:p')
                     
+                    # Настройки нумерации
                     num_pr = OxmlElement('w:numPr')
                     ilvl = OxmlElement('w:ilvl')
                     ilvl.set(qn('w:val'), '0')
@@ -190,19 +236,30 @@ class DocxTemplateProcessor:
                     num_pr.append(ilvl)
                     num_pr.append(num_id)
                     
+                    # Настройки абзаца
                     p_pr = OxmlElement('w:pPr')
                     p_pr.append(num_pr)
                     
+                    # Выравнивание по ширине
                     jc = OxmlElement('w:jc')
                     jc.set(qn('w:val'), 'both')
                     p_pr.append(jc)
                     
+                    # Отступы (левый 0.25 см, первая строка 1 см)
                     ind = OxmlElement('w:ind')
                     ind.set(qn('w:left'), str(LEFT_INDENT))
-                    ind.set(qn('w:hanging'), str(HANGING_INDENT))
-                    ind.set(qn('w:firstLine'), str(FIRST_LINE))
+                    ind.set(qn('w:firstLine'), str(FIRST_LINE_INDENT))
                     p_pr.append(ind)
                     
+                    # Позиции табуляции (1.75 см)
+                    tabs = OxmlElement('w:tabs')
+                    tab = OxmlElement('w:tab')
+                    tab.set(qn('w:val'), 'left')
+                    tab.set(qn('w:pos'), str(TAB_STOP_1))
+                    tabs.append(tab)
+                    p_pr.append(tabs)
+                    
+                    # Настройки интервала
                     spacing = OxmlElement('w:spacing')
                     spacing.set(qn('w:before'), '0')
                     spacing.set(qn('w:after'), '0')
@@ -212,6 +269,7 @@ class DocxTemplateProcessor:
                     
                     new_paragraph.append(p_pr)
                     
+                    # Добавляем текст
                     run = OxmlElement('w:r')
                     text = OxmlElement('w:t')
                     text.text = item
@@ -223,6 +281,9 @@ class DocxTemplateProcessor:
                     
                 break
         
+        # Остальная обработка документа
+        self._process_headers_footers(doc)
+
         for paragraph in doc.paragraphs:
             self._replace_in_paragraph(paragraph)
             
@@ -231,9 +292,15 @@ class DocxTemplateProcessor:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
                         self._replace_in_paragraph(paragraph)
-        print("sdfsdfsd")
-        doc.save(output_path)
 
+        for shape in doc.inline_shapes:
+            if hasattr(shape, 'text_frame'):
+                for paragraph in shape.text_frame.paragraphs:
+                    self._replace_in_paragraph(paragraph)
+
+        doc.save(output_path)  
+   
+        
 
     def _process_headers_footers(self, doc):
         """Обрабатывает верхние и нижние колонтитулы всех секций."""
@@ -250,12 +317,15 @@ class DocxTemplateProcessor:
                                 for paragraph in cell.paragraphs:
                                     self._replace_in_paragraph(paragraph)
 
+    # def _process_list_number(self, suka):
+    #     ...
+
     def _replace_in_paragraph(self, paragraph):
         """Заменяет ключи в параграфе с сохранением форматирования."""
         keys = self._find_all_keys(paragraph.text)
         if not keys:
             return
-       
+
         runs = paragraph.runs
         if not runs:
             return
@@ -264,25 +334,37 @@ class DocxTemplateProcessor:
         if not full_text:
             return
 
-       
-        for key, value in keys.items():
-            source = value['source']
-            key_name = value['key']
-            if source == key_name and source in self.data_sources:
-                replacement = str(self.data_sources[source])
-            # Для сложных ключей
-            elif source in self.data_sources and isinstance(self.data_sources[source], dict) \
-                and key_name in self.data_sources[source]:
-                replacement = str(self.data_sources[source][key_name])
-            else:
-                continue
-            
-        full_text = full_text.replace(key, replacement)
-          
+        for key, key_info in keys.items():
+            replacement = ""
+            source_data = self.data_sources.get(key_info['source'], {})
 
+            # Обработка сложных ключей вида {названиедокумента_из_парсера} или {адресат.фио_из_формы}
+            if 'object' in key_info:
+                if key_info['field']:  # если есть точка (второй группе)
+                    obj = source_data.get(key_info['object'], {})
+                    replacement = str(obj.get(key_info['field'], ""))
+                else:
+                    replacement = str(source_data.get(key_info['object'], ""))
+            # Обработка вложенных ключей вида {договор.номер}
+            elif '.' in key_info.get('key', ''):
+                parts = key_info['key'].split('.')
+                current = source_data
+                for part in parts:
+                    if isinstance(current, dict) and part in current:
+                        current = current[part]
+                    else:
+                        current = ""
+                        break
+                replacement = str(current)
+            else:  # Простые ключи
+                replacement = str(source_data.get(key_info['key'], ""))
+
+            full_text = full_text.replace(key, replacement)
+
+        # Обновляем текст с сохранением форматирования
         for run in runs:
             run.text = ""
-
+        
         if runs:
             runs[0].text = full_text
             for run in runs[1:]:
@@ -298,57 +380,102 @@ class DocxTemplateProcessor:
         if source_run.font.color.rgb:
             target_run.font.color.rgb = source_run.font.color.rgb
 
-    def _find_all_keys(self, text: str) -> Dict[str, dict]:        
+    def _find_all_keys(self, text: str) -> Dict[str, dict]:
         keys = {}
-
-        pattern = re.compile(r'\{([^}_]+)_из_([^}]+)\}')
-        pattern_simple = re.compile(r'\{([^}]+)\:\}')
         
-        for match in pattern.finditer(text):
+        # 1. Обрабатываем сложные ключи вида {адресат.фио_из_формы} или {названиедокумента_из_парсера}
+        complex_pattern = re.compile(r'\{([^}.]+)(?:\.([^}_]+))?_из_([^}]+)\}')
+        for match in complex_pattern.finditer(text):
             full_key = match.group(0)
-            key_name = match.group(1)
-            source = match.group(2)
-
+            object_name = match.group(1)  # например, "адресат" или "названиедокумента"
+            field_name = match.group(2)   # например, "фио" (может быть None)
+            source = match.group(3)       # например, "формы" или "парсера"
+            
             keys[full_key] = {
                 'found': True,
                 'source': source,
-                'key': key_name
+                'object': object_name,
+                'field': field_name
             }
 
-        for match in pattern_simple.finditer(text):            
+        # 2. Обрабатываем простые ключи вида {номердоговора} или {списокдокументов:}
+        simple_pattern = re.compile(r'\{([^}:]+)(?::)?\}')
+        for match in simple_pattern.finditer(text):
             full_key = match.group(0)
             key_name = match.group(1)
-                     
+            
+            # Проверяем плоские ключи во всех источниках
             for source_name, source_data in self.data_sources.items():
-                if isinstance(source_data, List) and source_name == key_name:
+                if key_name in source_data and not isinstance(source_data[key_name], (dict, list)):
                     keys[full_key] = {
                         'found': True,
                         'source': source_name,
                         'key': key_name
                     }
                     break
-       
+                
+                # Проверяем вложенные структуры (например, данные договора)
+                if isinstance(source_data, dict) and '.' in key_name:
+                    parts = key_name.split('.')
+                    current = source_data
+                    valid = True
+                    for part in parts:
+                        if part in current:
+                            current = current[part]
+                        else:
+                            valid = False
+                            break
+                    if valid:
+                        keys[full_key] = {
+                            'found': True,
+                            'source': source_name,
+                            'key': key_name
+                        }
+                        break
+        
         return keys
+ 
 
-def main(docx_path):
+def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folder_path):
     pdf_extractor = PDFDataExtractor()
     docx_processor = DocxTemplateProcessor()
 
+    addressee = {
+        'фио': recipient,
+        'должность': 'Заместителю генерального директора ООО «Мяу Кусь»'
+    }
+    signer = {
+        'фио': signer,
+        'должность': 'Генеральный директор'
+    }
+    copies = 4
+
+    pdf_extractor.set_frontend_data(contract_number, contract_date, addressee, signer, copies)
+    docx_processor.add_frontend_data({
+        'договор': {
+            'номер': contract_number,
+            'дата': contract_date
+        },
+        'адресат': addressee,
+        'подписант': signer,
+        'экземпляры': copies 
+    })
+
     pdf_files = []
-    for root, _, files in os.walk(r"C:\Users\andre\Desktop\Test"):
+    for root, _, files in os.walk(pdf_folder_path):
         pdf_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.pdf')])
     
+    print(f"Найдено {len(pdf_files)} PDF файлов. Начинаю парсинг...")
     
-    selected_indices = list(range(9))
-    
-    for idx in selected_indices:
-        selected_pdf = pdf_files[idx]
-        print(f"\nПарсинг файла: {selected_pdf}")
-        parsed_data = pdf_extractor.parse_pdf(selected_pdf)
+    for pdf_file in pdf_files:
+        print(f"Парсинг файла: {pdf_file}")
+        parsed_data = pdf_extractor.parse_pdf(pdf_file)
         docx_processor.add_parser_data(parsed_data)
     
     documents_list = pdf_extractor.generate_documents_list()
     docx_processor.add_documents_list(documents_list)
+    print("\nСформированный список документов:\n")
+    print(documents_list)
     
 
     db_data = {

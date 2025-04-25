@@ -53,35 +53,6 @@ const HomePage = () => {
     fetchTemplates();
   }, []);
 
-  /* useEffect(() => {
-    const fetchRecentTemplates = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/templates/recent');
-        const data = await response.json();
-        setLastTemplates(data);
-      } catch (error) {
-        console.error('Error fetching recent templates:', error);
-      }
-    };
-
-    const fetchAllTemplates = async () => {
-      try {
-        const response = await fetch(`http://localhost:8000/api/templates/all?skip=${allTemplatesPage * allTemplatesPerPage}&limit=${allTemplatesPerPage}`);
-        const data = await response.json();
-        setAllTemplates(data);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching all templates:', error);
-        setIsLoading(false);
-      }
-    };
-
-    fetchRecentTemplates();
-    fetchAllTemplates();
-  }, [allTemplatesPage]); */
-
-
-
   const handleTemplateClick = (template) => {
     setSelectedTemplate(template);
     setShowModal(true);
@@ -124,10 +95,19 @@ const HomePage = () => {
       setRecentTemplates(updatedRecent);
       localStorage.setItem('recentTemplates', JSON.stringify(updatedRecent));
 
+      const payload = {
+        docx_path: selectedTemplate.document_path,           // путь к шаблону
+        contract_number: formData.contractNumber,            // номер договора
+        contract_date: formData.contractDate,                // дата договора
+        recipient: formData.recipient,                       // адресат
+        signer: formData.signer,                             // подписант
+        pdf_folder_path: formData.fileLink                   // путь к папке с PDF
+      };
+
       const response = await fetch('http://localhost:8000/api/process-document/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ docx_path: selectedTemplate.document_path })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) throw new Error('Ошибка обработки документа');
@@ -144,33 +124,6 @@ const HomePage = () => {
       setIsLoading(false);
     }
   };
-
-  /* const handleTemplateClick = async (template) => {
-    try {
-      const response = await fetch('http://localhost:8000/api/process-document/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          docx_path: template.document_path
-        })
-      });
-
-      const result = await response.json();
-      
-      if (result.status === "success") {
-        navigate('/editor', {
-          state: {
-            pdfPath: result.pdf_path,
-            templateTitle: template.title
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error processing document:', error);
-    }
-  }; */
 
   const totalPages = Math.ceil(lastTemplates.length / templatesPerPage);
   const totalAllPages = Math.ceil(allTemplates.length / allTemplatesPerPage);
@@ -286,22 +239,6 @@ const HomePage = () => {
                         onError={(e) => e.target.src = '/placeholder.png'}
                       />
                     </div>
-{/*             {displayedTemplates.map((tpl, index) => (
-                <div
-                 key={tpl.id || index}
-                 className="template-wrapper"
-                 onClick={() => handleTemplateClick(tpl)}
-                 style={{ cursor: 'pointer'}}
-                > 
-                  <div className="template-card shadow">
-                    {tpl.preview_image && (
-                      <img 
-                        src={`http://localhost:8000/templates${tpl.preview_image}`} 
-                        alt={tpl.title} 
-                        className="img-fluid template-preview"
-                      />
-                    )}
-                  </div> */}
                   <div className="template-info text-center">
                     <strong>{tpl.title}</strong><br />
                     <small>{tpl.last_modified}</small>
@@ -386,16 +323,6 @@ const HomePage = () => {
                       onError={(e) => e.target.src = '/placeholder.png'}
                     />
                   </div>
-{/*           {displayedAllTemplates.map((tpl, index) => (
-              <div key={tpl.id || index} className="template-wrapper">
-                <div className="template-card shadow">
-                  {tpl.preview_image && (
-                    <img 
-                      src={`http://localhost:8000/templates${tpl.preview_image}`} 
-                      className="img-fluid template-preview"
-                    />
-                  )}
-                </div> */}
                 <div className="template-info-dark mt-2 text-center">
                   <strong>{tpl.title}</strong>
                 </div>
