@@ -12,6 +12,7 @@ from datetime import datetime
 import time
 from pathlib import Path
 from parser import main
+from docx.shared import Pt
 
 app = FastAPI()
 
@@ -35,19 +36,7 @@ class Template(BaseModel):
 
 templates_db = [
     {"id": 1, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 2, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 3, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 4, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 5, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 6, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 7, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 8, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 9, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 10, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 11, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 12, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 13, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
-    {"id": 14, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 2, "title": "Письмо о допуске ", "preview_image": "/image2.png", "document_path": "/templates/Письмо о допуске.docx", "last_modified": "5 минут назад"}
 ]
 
 @app.get("/api/templates/recent", response_model=List[Template])
@@ -177,3 +166,27 @@ async def replace_fields(request: Request):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при замене полей: {str(e)}")
+
+@app.post("/api/add-table-row")
+async def add_table_row(request: Request):
+    data = await request.json()
+    doc = Document(data["docx_path"])
+    table = doc.tables[data["table_index"]]
+    
+    row_number = len(table.rows)
+    new_row = table.add_row()
+    
+    # Заполняем ячейки по шаблону
+    if len(new_row.cells) >= 4:
+        new_row.cells[0].text = str(row_number)
+        new_row.cells[1].text = "{инженер.фио}"
+        new_row.cells[2].text = "{инженер.ноутбук}"
+        new_row.cells[3].text = "{1}"
+        
+        # Устанавливаем высоту строки (в пунктах)
+        for cell in new_row.cells:
+            cell.paragraphs[0].paragraph_format.space_after = Pt(0)
+            cell.paragraphs[0].paragraph_format.line_spacing = Pt(40)  # Высота строки
+    
+    doc.save(data["docx_path"])
+    return {"status": "success", "file_path": data["docx_path"]}

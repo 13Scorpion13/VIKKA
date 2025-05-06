@@ -21,9 +21,20 @@ const EditorPage = () => {
     const [fields, setFields] = useState([]);
     const [fieldValues, setFieldValues] = useState({});
 
-    const [setHasUnsavedChanges] = useState(false);
+    const [tables, setTables] = useState([]);
+    const [selectedTable, setSelectedTable] = useState(null);
+    const [buttonPosition, setButtonPosition] = useState(null);
+    
     const [initialFieldValues, setInitialFieldValues] = useState({});
     const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+
+
+    const [notification, setNotification] = useState({
+        show: false,
+        message: "",
+        type: ""
+    });
+
 
     const docxContainerRef = useRef(null);
 
@@ -116,19 +127,6 @@ const EditorPage = () => {
         const container = docxContainerRef.current;
         let html = container.innerHTML;
 
-        container.querySelectorAll(".docx-field").forEach(input => {
-            input.addEventListener("input", (e) => {
-                const field = e.target.dataset.field;
-                setFieldValues(prev => {
-                    const newValue = e.target.value;
-                    if (prev[field] !== newValue) {
-                        setHasUnsavedChanges(true);
-                    }
-                    return {...prev, [field]: newValue};
-                });
-            });
-        });
-
         fields.forEach(field => {
             const value = fieldValues[field] || "";
             html = html.replace(
@@ -175,15 +173,40 @@ const EditorPage = () => {
                 throw new Error(data.message || "Ошибка сохранения");
             }
 
-            if (response.ok) {
-                setInitialFieldValues({...fieldValues});
-                //setHasUnsavedChanges(false);
-                setShowUnsavedChangesModal(false);
-            }
+            setInitialFieldValues({...fieldValues});
+    
+            setNotification({
+                show: true,
+                message: "Изменения успешно сохранены",
+                type: "success"
+            });
+                
+            setTimeout(() => {
+                setNotification(prev => ({...prev, show: false}));
+            }, 3000);
+
+            const updatedDocPath = data.processed_docx_path || backendPath;
+            const res = await fetch(`http://localhost:8000/${updatedDocPath}`);
+            const blob = await res.arrayBuffer();
+            
+            docxContainerRef.current.innerHTML = '';
+            await renderAsync(blob, docxContainerRef.current, null, {
+                className: "docx",
+                inWrapper: true,
+            });
+                
+            setIsEditable(false);
                 
         } catch (error) {
             console.error("Ошибка сохранения:", error);
-            alert(`Ошибка: ${error.message}`);
+            setNotification({
+                show: true,
+                message: `Ошибка: ${error.message}`,
+                type: "error"
+            });
+            setTimeout(() => {
+                setNotification(prev => ({...prev, show: false}));
+            }, 3000);
         }
     };
 
@@ -193,7 +216,7 @@ const EditorPage = () => {
             return;
         }
 
-        if (isEditable) {           
+        if (isEditable) {         
             try {
                 const fullPath = location.state?.fullDocxPath.replace(/\\/g, "/");
                 const res = await fetch(fullPath.startsWith("http") ? fullPath : `http://localhost:8000/${fullPath}`);
@@ -257,6 +280,133 @@ const EditorPage = () => {
             }
         }
     };
+
+
+
+    useEffect(() => {
+        const handleTableClick = (table, index) => {
+            tables.forEach(t => t.style.outline = "");
+            table.style.outline = "2px solid #0d6efd";
+            
+            
+            const rect = table.getBoundingClientRect();
+            setButtonPosition({
+                style: {
+                    top: `${rect.bottom + window.scrollY + 5}px`,
+                    left: `${rect.left + rect.width / 2}px`,
+                    transform: 'translateX(-50%)'
+                },
+                tableIndex: index
+            });
+            
+            setSelectedTable(index);
+        };
+    
+        if (docxContainerRef.current && isEditable) {
+            const tablesInDoc = Array.from(docxContainerRef.current.querySelectorAll('table'));
+            tablesInDoc.forEach((table, index) => {
+                table.onclick = (e) => {
+                    e.stopPropagation();
+                    handleTableClick(table, index);
+                };
+            });
+            
+            setTables(tablesInDoc);
+        }
+    
+        return () => {
+            tables.forEach(table => {
+                table.onclick = null;
+                table.style.outline = "";
+            });
+        };
+    }, [isEditable, tables]);
+
+    const AddRowButton = ({ tableIndex, onAdd }) => {
+        return (
+            <div className="add-row-button" onClick={(e) => {
+                e.stopPropagation();
+                onAdd(tableIndex);
+            }}>
+                + Добавить строку
+            </div>
+        );
+    };
+
+    const handleAddRow = (tableIndex) => {
+        if (tableIndex !== 2) {
+            setNotification({
+                show: true,
+                message: "Строки можно добавлять только в указанную таблицу",
+                type: "warning"
+            });
+            return;
+        }
+    
+        handleAddTableRow(tableIndex);
+    };
+
+    const handleAddTableRow = async (tableIndex) => {
+        try {
+            const backendPath = location.state?.fullDocxPath
+                .replace(/\\/g, "/")
+                .replace("http://localhost:8000/", "");
+            
+            const response = await fetch("http://localhost:8000/api/add-table-row", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    docx_path: backendPath,
+                    table_index: tableIndex
+                }),
+            });
+    
+            if (response.ok) {
+                const res = await fetch(`http://localhost:8000/${backendPath}`);
+                const blob = await res.arrayBuffer();
+                docxContainerRef.current.innerHTML = '';
+                await renderAsync(blob, docxContainerRef.current);
+            }
+        } catch (error) {
+            setNotification({
+                show: true,
+                message: `Ошибка: ${error.message}`,
+                type: "error"
+            });
+        }
+    };
+
+    useEffect(() => {
+        if (!buttonPosition || !tables[buttonPosition.tableIndex]) return;
+
+        const updatePosition = () => {
+            const table = tables[buttonPosition.tableIndex];
+            const rect = table.getBoundingClientRect();
+            const scrollY = window.scrollY || window.pageYOffset;
+            
+            setButtonPosition(prev => ({
+                ...prev,
+                style: {
+                    ...prev.style,
+                    top: `${rect.bottom + scrollY + 5}px`,
+                    left: `${rect.left + rect.width / 2}px`
+                }
+            }));
+        };
+        
+        updatePosition();
+
+        window.addEventListener('scroll', updatePosition);
+        window.addEventListener('resize', updatePosition);
+        
+        return () => {
+            window.removeEventListener('scroll', updatePosition);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [buttonPosition, tables]);
+
+
+
     
 
     return (
@@ -394,6 +544,25 @@ const EditorPage = () => {
                 onConfirm={handleModalConfirm}
                 onCancel={handleModalCancel}
             />
+        )}
+
+        {notification.show && (
+            <div className={`notification ${notification.type}`}>
+                {notification.message}
+            </div>
+        )}
+
+        {buttonPosition && (
+            <div 
+                className="add-row-button"
+                style={buttonPosition.style}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddRow(buttonPosition.tableIndex);
+                }}
+            >
+                + Добавить строку
+            </div>
         )}
       </div>
     );
