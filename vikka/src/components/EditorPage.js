@@ -35,13 +35,66 @@ const EditorPage = () => {
         type: ""
     });
 
-    const docxContainerRef = useRef(null);
+    const FIELD_TYPES = {
+        data_field: {
+            type: "text",
+            placeholder: "Дата (ДД.ММ.ГГГГ)",
+            style: { 
+                height: "25px",
+                width: "140px",
+                fontStyle: "italic",
+                textAlign: "center"
+            }
+        },
+        numbering_date: {
+            type: "text",
+            placeholder: "Дата (ДД.ММ.ГГГГ)",
+            style: { 
+                height: "25px",
+                width: "140px",
+                textAlign: "center"
+            }
+        },
+        contract_field: {
+            type: "text",
+            placeholder: "№ договора",
+            style: { 
+                height: "25px",
+                width: "140px",
+                fontStyle: "italic",
+                textAlign: "center"
+            }
+        },
+        number_field: {
+            type: "text",
+            placeholder: "Учетный номер",
+            style: { 
+                height: "25px",
+                width: "110px",
+                textAlign: "center"
+            }
+        },
+        documentation_type: {
+            type: "select",
+            options: ["", "рабочую", "исполнительную", "эксплутационную", "рабочую и исполнительную", "рабочую и эксплутационную", "исполнительную и эксплутацонную", "рабочую, исполнительную и эксплутационную"],
+            style: { 
+                height: "25px",
+                width: "140px",
+                textAlign: "center"
+            }
+        },
+        num_copies: {
+            type: "text",
+            placeholder: "1/1",
+            style: {
+                height: "25px",
+                width: "50px",
+                textAlign: "center"
+            }
+        }
+    };
 
-    /* const hasUnsavedChanges = useMemo(() => {
-        return Object.keys(fieldValues).some(key => {
-            return fieldValues[key] !== initialFieldValues[key];
-        });
-    }, [fieldValues, initialFieldValues]); */
+    const docxContainerRef = useRef(null);
 
     useEffect(() => {
         const changesExist = Object.keys(fieldValues).some(
@@ -49,26 +102,6 @@ const EditorPage = () => {
         );
         setHasUnsavedChanges(changesExist);
     }, [fieldValues, initialFieldValues]);
-
-    /* const UnsavedChangesModal = ({ onConfirm, onCancel }) => {
-        return (
-          <div className="modal-overlay">
-            <div className="modal-content">
-              <h3>Внимание!</h3>
-              <p>Вы не сохранили внесенные изменения!</p>
-              <p>Выйти без сохранения?</p>
-              <div className="modal-buttons">
-                <button className="btn btn-danger" onClick={onConfirm}>
-                  Да, выйти
-                </button>
-                <button className="btn btn-secondary" onClick={onCancel}>
-                  Отмена
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-    }; */
 
     const UnsavedChangesModal = ({ isOpen, onConfirm, onCancel }) => {
         if (!isOpen) return null;
@@ -114,7 +147,6 @@ const EditorPage = () => {
                     fullPath = `http://localhost:8000/${fullPath}`;
                 }
 
-                // 1. Загружаем DOCX для превью
                 const res = await fetch(fullPath);
                 const blob = await res.arrayBuffer();
                 await renderDocument(blob, isEditable);
@@ -153,6 +185,8 @@ const EditorPage = () => {
         await renderAsync(blob, docxContainerRef.current, null, {
             className: "docx",
             inWrapper: true,
+            showHeader: true,
+            showFooter: true
         });
     
         const container = docxContainerRef.current;
@@ -160,66 +194,81 @@ const EditorPage = () => {
         if (isEditMode) {
             let html = container.innerHTML;
             fields.forEach(field => {
+                const config = FIELD_TYPES[field] || { type: "text" };
                 const value = fieldValues[field] || "";
-                html = html.replace(
-                    new RegExp(`\\{${field}\\}`, "g"),
-                    `<input 
-                        type="text" 
-                        class="docx-field" 
-                        data-field="${field}" 
-                        value="${value}"
-                        style="
-                            border: 1px solid #ccc;
-                            padding: 0px;
-                            width: 90px;
-                            font-style: italic;
-                            text-align: center;"
-                    />`
-                );
+                
+                if (config.type === "select") {
+                    html = html.replace(
+                        new RegExp(`\\{${field}\\}`, "g"),
+                        `<select 
+                            class="docx-field docx-select"
+                            data-field="${field}"
+                            style="${cssStyleToString(config.style)}"
+                        >
+                            ${config.options.map(opt => 
+                                `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`
+                            ).join('')}
+                        </select>`
+                    );
+                } else {
+                    html = html.replace(
+                        new RegExp(`\\{${field}\\}`, "g"),
+                        `<input 
+                            type="${config.type}"
+                            class="docx-field"
+                            data-field="${field}"
+                            value="${value}"
+                            placeholder="${config.placeholder || ''}"
+                            style="${cssStyleToString(config.style)}"
+                        />`
+                    );
+                }
             });
             container.innerHTML = html;
-    
-            // Добавляем обработчики
-            /* container.querySelectorAll(".docx-field").forEach(input => {
-                input.addEventListener("input", (e) => {
-                    const field = e.target.dataset.field;
-                    setFieldValues(prev => ({
-                        ...prev,
-                        [field]: e.target.value,
-                    }));
-                });
-            }); */
+
             container.querySelectorAll(".docx-field").forEach(input => {
                 input.style.fontStyle = 'italic';
                 input.style.textAlign = 'center';
                 input.addEventListener("input", (e) => {
                     const field = e.target.dataset.field;
-                    setFieldValues(prev => {
-                        const newValues = {
-                            ...prev, 
-                            [field]: e.target.value
-                        };
-                        
-                        // Автоматически проверяем изменения
-                        const changesExist = Object.keys(newValues).some(
-                            key => newValues[key] !== initialFieldValues[key]
-                        );
-                        setHasUnsavedChanges(changesExist);
-                        
-                        return newValues;
-                    });
+                    updateFieldValue(field, e.target.value);
                 });
             });
-
+    
+            container.querySelectorAll(".docx-select").forEach(select => {
+                select.style.fontStyle = 'italic';
+                select.style.textAlign = 'center';
+                select.addEventListener("change", (e) => {
+                    const field = e.target.dataset.field;
+                    updateFieldValue(field, e.target.value);
+                });
+            });
+    
         } else {
-            // Режим preview - стилизуем поля
             let html = container.innerHTML;
             html = html.replace(
-                /\{(data_field|contract_field)\}/g, 
+                /\{(data_field|contract_field|documentation_type|num_copies|number_field|numbering_date)\}/g, 
                 (match, field) => `<span class="docx-template-field" data-field="${field}">${getFieldDisplayName(field)}</span>`
             );
             container.innerHTML = html;
         }
+    };
+
+    const updateFieldValue = (field, value) => {
+        setFieldValues(prev => {
+            const newValues = { ...prev, [field]: value };
+            const changesExist = Object.keys(newValues).some(
+                key => newValues[key] !== initialFieldValues[key]
+            );
+            setHasUnsavedChanges(changesExist);
+            return newValues;
+        });
+    };
+
+    const cssStyleToString = (styleObj) => {
+        return Object.entries(styleObj).map(([key, value]) => 
+            `${key}:${value}`
+        ).join(';');
     };
 
     const handleGenerateDocument = async () => {
@@ -285,7 +334,6 @@ const EditorPage = () => {
         }
         setIsEditable(!isEditable);
     
-        // Перезагружаем документ в нужном режиме
         try {
             let fullPath = location.state?.fullDocxPath;
             fullPath = fullPath.replace(/\\/g, "/");
@@ -306,8 +354,12 @@ const EditorPage = () => {
 
     const getFieldDisplayName = (field) => {
         const fieldNames = {
-            'data_field': 'дата письма',
-            'contract_field': 'номер письма'
+            'data_field': 'Дата письма',
+            'contract_field': 'Номер письма',
+            num_copies: 'Кол-во экземпляров',
+            documentation_type: 'тип документации',
+            number_field: 'Учетный номер',
+            numbering_date: 'Дата'
         };
         return fieldNames[field] || field;
     };

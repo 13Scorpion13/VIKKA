@@ -36,7 +36,7 @@ class Template(BaseModel):
     last_modified: str = None
 
 templates_db = [
-    {"id": 1, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/Письмо о представлении документации.docx", "last_modified": "5 минут назад"},
+    {"id": 1, "title": "О представлении документации", "preview_image": "/image2.png", "document_path": "/templates/Письмо о представлении документации.docx", "last_modified": "5 минут назад"},
     {"id": 2, "title": "Письмо о допуске ", "preview_image": "/image2.png", "document_path": "/templates/Письмо о допуске.docx", "last_modified": "5 минут назад"}
 ]
 
@@ -114,10 +114,6 @@ async def extract_fields(request: Request):
         doc = Document(docx_path)
         fields = set()
         
-        
-        """ for paragraph in doc.paragraphs:
-            matches = re.findall(r"\{(\w+)\}", paragraph.text)
-            fields.update(matches) """
         
         for paragraph in doc.paragraphs:
             fields.update(re.findall(r"\{(\w+)\}", paragraph.text))
