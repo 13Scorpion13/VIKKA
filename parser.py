@@ -6,6 +6,9 @@ from docx import Document
 from typing import Dict, List
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+import pymorphy3 as pymorphy2
+
+morph = pymorphy2.MorphAnalyzer()
 
 class PDFDataExtractor:
     def __init__(self):
@@ -18,7 +21,8 @@ class PDFDataExtractor:
             },
             'адресат': {
                 'фио': '',
-                'должность': ''
+                'должность': '',
+                'организация' : ''
             },
             'подписант': {
                 'фио': '',
@@ -205,7 +209,55 @@ class DocxTemplateProcessor:
         """Добавляет список документов."""
         self.data_sources['списокдокументов'] = documents_list
 
-    
+    def _format_fio(self, fio: str, format_key: str) -> str:
+        """Форматирует ФИО в зависимости от регистра символов в ключе"""
+        if not fio:
+            return ""
+        
+        
+
+        parts = [p.strip() for p in fio.split() if p.strip()]
+        if not parts:
+            return ""
+        
+        for i in range(1, len(parts)):
+            parsed = morph.parse(parts[i])[0]
+            nominative = parsed.inflect({'nomn'})  # именительный падеж
+            if nominative:
+                parts[i] = nominative.word.capitalize()
+
+        # Получаем часть ключа до "_из_формы" и убираем фигурные скобки
+        format_part = format_key.split('_')[0].split('.')[-1].replace('{', '').replace('}', '')
+
+        match format_part:
+            case 'ФИО':
+                return " ".join(parts)  # Полное ФИО: Фамилия Имя Отчество
+            case 'ФИо':
+                if len(parts) >= 3:
+                    return f"{parts[0]} {parts[1]} {parts[2][0]}."
+                elif len(parts) == 2:
+                    return f"{parts[0]} {parts[1]}"
+                return parts[0]
+            case 'Фио':
+                if len(parts) >= 3:
+                    return f"{parts[0]} {parts[1][0]}.{parts[2][0]}."
+                elif len(parts) == 2:
+                    return f"{parts[0]} {parts[1][0]}."
+                return parts[0]
+            case 'иоФ':
+                if len(parts) >= 3:
+                    return f"{parts[1][0]}.{parts[2][0]}. {parts[0]}"
+                elif len(parts) == 2:
+                    return f"{parts[1][0]}. {parts[0]}"
+                return parts[0]
+            case 'ИО':
+                if len(parts) >= 3:
+                    return f"{parts[1]} {parts[2]}"
+                elif len(parts) >= 2:
+                    return parts[1]
+                return parts[0]
+            case _:
+                return " ".join(parts)  # По умолчанию — полное ФИО
         
     def process_template(self, template_path: str, output_path: str):
         """Обрабатывает шаблон с выравниванием по ширине и заданными отступами"""
@@ -321,31 +373,46 @@ class DocxTemplateProcessor:
     #     ...
 
     def _replace_in_paragraph(self, paragraph):
-        """Заменяет ключи в параграфе с сохранением форматирования."""
+        """Заменяет ключи с учетом любых форматов ФИО"""
         keys = self._find_all_keys(paragraph.text)
         if not keys:
             return
 
         runs = paragraph.runs
-        if not runs:
-            return
-
         full_text = ''.join(run.text for run in runs)
-        if not full_text:
-            return
-
+        
         for key, key_info in keys.items():
+            if not key_info:
+                continue
+                
             replacement = ""
             source_data = self.data_sources.get(key_info['source'], {})
-
-            # Обработка сложных ключей вида {названиедокумента_из_парсера} или {адресат.фио_из_формы}
-            if 'object' in key_info:
-                if key_info['field']:  # если есть точка (второй группе)
+            
+            # Обработка всех вариантов ключей ФИО
+            if any(fio_key in key.lower() for fio_key in ['фио', 'иоф', 'ио', 'фИО', 'ФИО']):
+                # Для ключей вида {ФИО_из_бд}
+                if key_info['source'] == 'бд' and key_info.get('object', '').upper() == 'ФИО':
+                    replacement = str(source_data.get(key_info['object'], ""))
+                
+                # Для вложенных ключей {адресат.Фио_из_формы}
+                elif 'object' in key_info:
                     obj = source_data.get(key_info['object'], {})
-                    replacement = str(obj.get(key_info['field'], ""))
+                    if isinstance(obj, dict):
+                        fio_value = str(obj.get('фио', ""))
+                    else:
+                        fio_value = str(obj) if obj else ""
+                    replacement = self._format_fio(fio_value, key)
+            
+            # Остальные ключи
+            elif 'object' in key_info:
+                if key_info.get('field'):
+                    obj = source_data.get(key_info['object'], {})
+                    if isinstance(obj, dict):
+                        replacement = str(obj.get(key_info['field'], ""))
+                    else:
+                        replacement = str(obj) if obj else ""
                 else:
                     replacement = str(source_data.get(key_info['object'], ""))
-            # Обработка вложенных ключей вида {договор.номер}
             elif '.' in key_info.get('key', ''):
                 parts = key_info['key'].split('.')
                 current = source_data
@@ -356,20 +423,18 @@ class DocxTemplateProcessor:
                         current = ""
                         break
                 replacement = str(current)
-            else:  # Простые ключи
-                replacement = str(source_data.get(key_info['key'], ""))
+            else:
+                replacement = str(source_data.get(key_info.get('key', ""), ""))
 
+            print(f"Processing key: {key} → {replacement}")
             full_text = full_text.replace(key, replacement)
 
-        # Обновляем текст с сохранением форматирования
+        # Обновляем текст
         for run in runs:
             run.text = ""
-        
         if runs:
             runs[0].text = full_text
-            for run in runs[1:]:
-                self._copy_run_formatting(runs[0], run)
-
+    
     def _copy_run_formatting(self, source_run, target_run):
         """Копирует форматирование из одного run в другой."""
         target_run.bold = source_run.bold
@@ -383,22 +448,22 @@ class DocxTemplateProcessor:
     def _find_all_keys(self, text: str) -> Dict[str, dict]:
         keys = {}
         
-        # 1. Обрабатываем сложные ключи вида {адресат.фио_из_формы} или {названиедокумента_из_парсера}
+        # 1. Обрабатываем сложные ключи вида {адресат.Фио_из_формы}
         complex_pattern = re.compile(r'\{([^}.]+)(?:\.([^}_]+))?_из_([^}]+)\}')
         for match in complex_pattern.finditer(text):
             full_key = match.group(0)
-            object_name = match.group(1)  # например, "адресат" или "названиедокумента"
-            field_name = match.group(2)   # например, "фио" (может быть None)
-            source = match.group(3)       # например, "формы" или "парсера"
+            object_name = match.group(1)  # "адресат"
+            field_name = match.group(2)   # "Фио"
+            source = match.group(3)       # "формы"
             
             keys[full_key] = {
                 'found': True,
                 'source': source,
                 'object': object_name,
-                'field': field_name
+                'field': field_name.lower() if field_name else None # Приводим к нижнему регистру для унификации
             }
 
-        # 2. Обрабатываем простые ключи вида {номердоговора} или {списокдокументов:}
+        # 2. Обрабатываем простые ключи вида {номердоговора}
         simple_pattern = re.compile(r'\{([^}:]+)(?::)?\}')
         for match in simple_pattern.finditer(text):
             full_key = match.group(0)
@@ -442,7 +507,8 @@ def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folde
 
     addressee = {
         'фио': recipient,
-        'должность': 'Заместителю генерального директора ООО «Мяу Кусь»'
+        'должность': 'Заместителю генерального директора',
+        'организация': 'ООО «Мяу Кусь»'
     }
     signer = {
         'фио': signer,
@@ -486,7 +552,8 @@ def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folde
 
     template_path = f"C:/Users/andre/Desktop/VIKKA{docx_path}"
     print(template_path)
-    output_path = r"converted_files\template.docx"
+    original_filename = os.path.basename(docx_path)
+    output_path = os.path.join("converted_files", original_filename)
     docx_processor.process_template(template_path, output_path)
     print(f"\nДокумент сохранен как {output_path}")
     return output_path

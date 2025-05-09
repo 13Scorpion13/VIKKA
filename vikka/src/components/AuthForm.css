@@ -32,7 +32,7 @@
   border-radius: 50px;
   box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
   width: 350px;
-  border: 1px solid #ff833a;
+  border: 1px solid #ff9a68;
   text-align: center;
 }
 
@@ -77,7 +77,7 @@
 }
 
 .auth-btn {
-  background: #ff833a;
+  background: #ff9a68;
   color: white;
   border: none;
   padding: 10px;
@@ -140,9 +140,9 @@
   opacity: 0.5;
 }
 
-.circles div { border: 1px solid #ff833a; }
+.circles div { border: 1px solid #ff9a68; }
 .circles-center div { border: 1px solid #4d4d4d; }
-.circles-right div { border: 1px solid #ff833a; }
+.circles-right div { border: 1px solid #ff9a68; }
 
 .circles div:nth-child(1), .circles-right div:nth-child(1) { width: 80%; height: 80%; }
 .circles div:nth-child(2), .circles-right div:nth-child(2) { width: 70%; height: 70%; }

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from parser import main
 from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 app = FastAPI()
 
@@ -35,7 +36,7 @@ class Template(BaseModel):
     last_modified: str = None
 
 templates_db = [
-    {"id": 1, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/template.docx", "last_modified": "5 минут назад"},
+    {"id": 1, "title": "О представлении ", "preview_image": "/image2.png", "document_path": "/templates/Письмо о представлении документации.docx", "last_modified": "5 минут назад"},
     {"id": 2, "title": "Письмо о допуске ", "preview_image": "/image2.png", "document_path": "/templates/Письмо о допуске.docx", "last_modified": "5 минут назад"}
 ]
 
@@ -114,9 +115,18 @@ async def extract_fields(request: Request):
         fields = set()
         
         
-        for paragraph in doc.paragraphs:
+        """ for paragraph in doc.paragraphs:
             matches = re.findall(r"\{(\w+)\}", paragraph.text)
-            fields.update(matches)
+            fields.update(matches) """
+        
+        for paragraph in doc.paragraphs:
+            fields.update(re.findall(r"\{(\w+)\}", paragraph.text))
+    
+        for section in doc.sections:
+            for paragraph in section.header.paragraphs:
+                fields.update(re.findall(r"\{(\w+)\}", paragraph.text))
+            for paragraph in section.footer.paragraphs:
+                fields.update(re.findall(r"\{(\w+)\}", paragraph.text))
         
         for table in doc.tables:
             for row in table.rows:
@@ -157,6 +167,10 @@ async def replace_fields(request: Request):
                     for field, value in fields_data.items():
                         if f"{{{field}}}" in cell.text:
                             cell.text = cell.text.replace(f"{{{field}}}", str(value))
+                            for paragraph in cell.paragraphs:
+                                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                for run in paragraph.runs:
+                                    run.font.italic = True
         
         
         

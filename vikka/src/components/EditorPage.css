@@ -14,7 +14,7 @@
 .approval-box {
     position: sticky;
     top: 40px;
-    background-color: #FF833A;
+    background-color: #ff9a68;
     min-width: 240px;
     max-width: 300px;
     font-size: 18px;
@@ -46,7 +46,7 @@
 .editor-actions {
     position: sticky;
     top: 40px;
-    background-color: #FF833A;
+    background-color: #ff9a68;
     width: 60px;
     border-radius: 12px;
     z-index: 1;
@@ -123,7 +123,7 @@
 .orange-circle-editor-group-left .circle,
 .orange-circle-editor-group-right .circle {
   position: absolute;
-  border: 1px solid #FF833A;
+  border: 1px solid #ff9a68;
   border-radius: 50%;
   background: transparent;
 }
@@ -178,7 +178,7 @@
 }
   
 .modal-content h3 {
-    color: #FF833A;
+    color: #ff9a68;
     margin-bottom: 15px;
 }
   
@@ -226,7 +226,7 @@
 
 .add-row-button {
     position: absolute;
-    background: #FF833A;
+    background: #ff9a68;
     color: white;
     padding: 5px 10px;
     border-radius: 4px;
@@ -248,10 +248,21 @@
 }
 
 .docx-wrapper table:hover {
-    outline: 2px solid #FF833A;
+    outline: 2px solid #ff9a68;
 }
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateX(-50%) translateY(10px); }
     to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.docx-template-field {
+    color: #ff9a68;
+    font-style: italic;
+    padding: 0 4px;
+    font-family: 'Courier New', monospace;
+}
+
+.btn-danger {
+    width: 120px;
 }

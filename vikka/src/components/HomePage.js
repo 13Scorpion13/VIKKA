@@ -366,7 +366,7 @@ const HomePage = () => {
               </div>
               
               <div className="form-group">
-                <label>Ссылка на проводник</label>
+                <label>Ссылка на файлы с приложениями</label>
                 <input
                   type="text"
                   name="fileLink"

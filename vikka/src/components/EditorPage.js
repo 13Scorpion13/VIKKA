@@ -24,10 +24,10 @@ const EditorPage = () => {
     const [tables, setTables] = useState([]);
     const [selectedTable, setSelectedTable] = useState(null);
     const [buttonPosition, setButtonPosition] = useState(null);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     
     const [initialFieldValues, setInitialFieldValues] = useState({});
     const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
-
 
     const [notification, setNotification] = useState({
         show: false,
@@ -35,16 +35,22 @@ const EditorPage = () => {
         type: ""
     });
 
-
     const docxContainerRef = useRef(null);
 
-    const hasUnsavedChanges = useMemo(() => {
+    /* const hasUnsavedChanges = useMemo(() => {
         return Object.keys(fieldValues).some(key => {
             return fieldValues[key] !== initialFieldValues[key];
         });
+    }, [fieldValues, initialFieldValues]); */
+
+    useEffect(() => {
+        const changesExist = Object.keys(fieldValues).some(
+            key => fieldValues[key] !== initialFieldValues[key]
+        );
+        setHasUnsavedChanges(changesExist);
     }, [fieldValues, initialFieldValues]);
 
-    const UnsavedChangesModal = ({ onConfirm, onCancel }) => {
+    /* const UnsavedChangesModal = ({ onConfirm, onCancel }) => {
         return (
           <div className="modal-overlay">
             <div className="modal-content">
@@ -56,6 +62,34 @@ const EditorPage = () => {
                   Да, выйти
                 </button>
                 <button className="btn btn-secondary" onClick={onCancel}>
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+    }; */
+
+    const UnsavedChangesModal = ({ isOpen, onConfirm, onCancel }) => {
+        if (!isOpen) return null;
+      
+        return (
+          <div className="modal-overlay" onClick={onCancel}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h3>Внимание!</h3>
+              <p>Вы не сохранили внесенные изменения!</p>
+              <p>Выйти без сохранения?</p>
+              <div className="modal-buttons">
+                <button 
+                  className="btn btn-danger" 
+                  onClick={onConfirm}
+                >
+                  Да, выйти
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={onCancel}
+                >
                   Отмена
                 </button>
               </div>
@@ -83,10 +117,7 @@ const EditorPage = () => {
                 // 1. Загружаем DOCX для превью
                 const res = await fetch(fullPath);
                 const blob = await res.arrayBuffer();
-                await renderAsync(blob, docxContainerRef.current, null, {
-                    className: "docx",
-                    inWrapper: true,
-                });
+                await renderDocument(blob, isEditable);
 
                 const backendPath = fullPath.replace("http://localhost:8000/", "");
                 const fieldsResponse = await fetch("http://localhost:8000/api/extract-fields", {
@@ -94,6 +125,7 @@ const EditorPage = () => {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ docx_path: backendPath }),
                 });
+                
                 const { fields } = await fieldsResponse.json();
                 setFields(fields);
 
@@ -101,7 +133,10 @@ const EditorPage = () => {
                 fields.forEach(field => {
                     initialValues[field] = "";
                 });
+                
                 setFieldValues(initialValues);
+                setInitialFieldValues({...initialValues});
+                setHasUnsavedChanges(false);
 
             } catch (error) {
                 console.error("Ошибка:", error);
@@ -109,50 +144,83 @@ const EditorPage = () => {
         };
 
         loadDocxAndExtractFields();
-    }, []);
+    }, [isEditable]);
 
-    useEffect(() => {
-        if (fields.length > 0) {
-            const initialValues = {};
-            fields.forEach(field => {
-                initialValues[field] = fieldValues[field] || "";
-            });
-            setInitialFieldValues(initialValues);
-        }
-    }, [fields]);
 
-    useEffect(() => {
-        if (!isEditable || !docxContainerRef.current) return;
 
+
+    const renderDocument = async (blob, isEditMode) => {       
+        await renderAsync(blob, docxContainerRef.current, null, {
+            className: "docx",
+            inWrapper: true,
+        });
+    
         const container = docxContainerRef.current;
-        let html = container.innerHTML;
-
-        fields.forEach(field => {
-            const value = fieldValues[field] || "";
-            html = html.replace(
-                new RegExp(`\\{${field}\\}`, "g"),
-                `<input 
-                    type="text" 
-                    class="docx-field" 
-                    data-field="${field}" 
-                    value="${value}"
-                    style="border: 1px solid #ccc; padding: 0px; width: 90px;"
-                />`
-            );
-        });
-
-        container.innerHTML = html;
-
-        container.querySelectorAll(".docx-field").forEach(input => {
-            input.addEventListener("input", (e) => {
-                const field = e.target.dataset.field;
-                setFieldValues(prev => ({
-                    ...prev,
-                    [field]: e.target.value,
-                }));
+        
+        if (isEditMode) {
+            let html = container.innerHTML;
+            fields.forEach(field => {
+                const value = fieldValues[field] || "";
+                html = html.replace(
+                    new RegExp(`\\{${field}\\}`, "g"),
+                    `<input 
+                        type="text" 
+                        class="docx-field" 
+                        data-field="${field}" 
+                        value="${value}"
+                        style="
+                            border: 1px solid #ccc;
+                            padding: 0px;
+                            width: 90px;
+                            font-style: italic;
+                            text-align: center;"
+                    />`
+                );
             });
-        });
-    }, [isEditable, fields]);
+            container.innerHTML = html;
+    
+            // Добавляем обработчики
+            /* container.querySelectorAll(".docx-field").forEach(input => {
+                input.addEventListener("input", (e) => {
+                    const field = e.target.dataset.field;
+                    setFieldValues(prev => ({
+                        ...prev,
+                        [field]: e.target.value,
+                    }));
+                });
+            }); */
+            container.querySelectorAll(".docx-field").forEach(input => {
+                input.style.fontStyle = 'italic';
+                input.style.textAlign = 'center';
+                input.addEventListener("input", (e) => {
+                    const field = e.target.dataset.field;
+                    setFieldValues(prev => {
+                        const newValues = {
+                            ...prev, 
+                            [field]: e.target.value
+                        };
+                        
+                        // Автоматически проверяем изменения
+                        const changesExist = Object.keys(newValues).some(
+                            key => newValues[key] !== initialFieldValues[key]
+                        );
+                        setHasUnsavedChanges(changesExist);
+                        
+                        return newValues;
+                    });
+                });
+            });
+
+        } else {
+            // Режим preview - стилизуем поля
+            let html = container.innerHTML;
+            html = html.replace(
+                /\{(data_field|contract_field)\}/g, 
+                (match, field) => `<span class="docx-template-field" data-field="${field}">${getFieldDisplayName(field)}</span>`
+            );
+            container.innerHTML = html;
+        }
+    };
 
     const handleGenerateDocument = async () => {
         try {
@@ -215,19 +283,33 @@ const EditorPage = () => {
             setShowUnsavedChangesModal(true);
             return;
         }
-
-        if (isEditable) {         
-            try {
-                const fullPath = location.state?.fullDocxPath.replace(/\\/g, "/");
-                const res = await fetch(fullPath.startsWith("http") ? fullPath : `http://localhost:8000/${fullPath}`);
-                const blob = await res.arrayBuffer();
-                await renderAsync(blob, docxContainerRef.current);
-            } catch (error) {
-                console.error("Ошибка загрузки документа:", error);
+        setIsEditable(!isEditable);
+    
+        // Перезагружаем документ в нужном режиме
+        try {
+            let fullPath = location.state?.fullDocxPath;
+            fullPath = fullPath.replace(/\\/g, "/");
+            if (!fullPath.startsWith("http")) {
+                fullPath = `http://localhost:8000/${fullPath}`;
             }
+            
+            const res = await fetch(fullPath);
+            const blob = await res.arrayBuffer();
+            await renderDocument(blob, !isEditable);
+            
+            setIsEditable(!isEditable);
+        } catch (error) {
+            console.error("Ошибка переключения режима:", error);
         }
-        
-        setIsEditable(prev => !prev);
+    };
+
+
+    const getFieldDisplayName = (field) => {
+        const fieldNames = {
+            'data_field': 'дата письма',
+            'contract_field': 'номер письма'
+        };
+        return fieldNames[field] || field;
     };
 
     const handleModalConfirm = async () => {
@@ -252,36 +334,6 @@ const EditorPage = () => {
     const handleModalCancel = () => {
         setShowUnsavedChangesModal(false);
     };
-
-    const handleSave = async () => {
-        if (docxContainerRef.current) {
-            const htmlContent = docxContainerRef.current.innerHTML;
-    
-            try {
-                const response = await fetch("http://localhost:8000/api/save-docx", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        html: htmlContent,
-                        original_path: location.state?.fullDocxPath || null,
-                    }),
-                });
-    
-                if (!response.ok) {
-                    throw new Error("Ошибка при сохранении документа");
-                }
-    
-                alert("Изменения сохранены!");
-            } catch (err) {
-                console.error("Ошибка сохранения:", err);
-                alert("Не удалось сохранить изменения");
-            }
-        }
-    };
-
-
 
     useEffect(() => {
         const handleTableClick = (table, index) => {
@@ -541,6 +593,7 @@ const EditorPage = () => {
         </section>
         {showUnsavedChangesModal && (
             <UnsavedChangesModal
+                isOpen={showUnsavedChangesModal}
                 onConfirm={handleModalConfirm}
                 onCancel={handleModalCancel}
             />
