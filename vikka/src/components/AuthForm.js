@@ -23,7 +23,7 @@ const AuthForm = () => {
     console.log("Попытка входа", formData);
     
     try {
-      const response = await fetch("http://localhost:5000/login", {
+      const response = await fetch("http://localhost:8000/users/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
@@ -37,6 +37,7 @@ const AuthForm = () => {
         setError(result.message || "Ошибка авторизации");
       }
     } catch (err) {
+      alert(err);
       setError("Ошибка соединения с сервером");
     }
   };

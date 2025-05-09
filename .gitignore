@@ -4,10 +4,10 @@ __pycache__/
 /vikka/node_modules
 /vikka/.pnp
 .pnp.js
-
+venv/
 # testing
 /coverage
-
+.env
 # production
 /build
 
