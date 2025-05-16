@@ -33,11 +33,26 @@ class Template(BaseModel):
     title: str
     preview_image: str
     document_path: str
+    form_type: str
     last_modified: str = None
 
 templates_db = [
-    {"id": 1, "title": "О представлении документации", "preview_image": "/image2.png", "document_path": "/templates/Письмо о представлении документации.docx", "last_modified": "5 минут назад"},
-    {"id": 2, "title": "Письмо о допуске ", "preview_image": "/image2.png", "document_path": "/templates/Письмо о допуске.docx", "last_modified": "5 минут назад"}
+    {
+        "id": 1,
+        "title": "О представлении документации",
+        "preview_image": "/image2.png",
+        "document_path": "/templates/Письмо о представлении документации.docx",
+        "form_type": "full",
+        "last_modified": "5 минут назад"
+    },
+    {
+        "id": 2,
+        "title": "Письмо о допуске ",
+        "preview_image": "/image2.png",
+        "document_path": "/templates/Письмо о допуске.docx",
+        "form_type": "minimal",
+        "last_modified": "5 минут назад"
+    }
 ]
 
 @app.get("/api/templates/recent", response_model=List[Template])
@@ -65,26 +80,31 @@ async def process_document(request: Request):
         data = await request.json()
         print("Полученные данные:", data)
 
-        
-        contract_number = data.get("contract_number")
-        contract_date = data.get("contract_date")
         recipient = data.get("recipient")
         signer = data.get("signer")
-        pdf_folder_path = data.get("pdf_folder_path")
         docx_path = data.get("docx_path")
 
-        if not docx_path:
-            raise HTTPException(status_code=400, detail="Не указан путь к документу")
+        if not all([docx_path, recipient, signer]):
+            raise HTTPException(status_code=400, detail="Обязательные поля отсутствуют")
         
-        print(f"[1/6] Получен путь к DOCX: {docx_path}")
+        template = next((t for t in templates_db if t["document_path"] == docx_path), None)
+        form_type = template.get("form_type") if template else "full"
 
+        if form_type == "full":
+            contract_number = data.get("contract_number")
+            contract_date = data.get("contract_date")
+            pdf_folder_path = data.get("pdf_folder_path")
+            
+            if not all([contract_number, contract_date, pdf_folder_path]):
+                raise HTTPException(status_code=400, detail="Не заполнены обязательные поля для полной формы")
+        
         full_docx_path = main(
-            docx_path,
-            contract_number,
-            contract_date,
-            recipient,
-            signer,
-            pdf_folder_path
+            docx_path=data["docx_path"],
+            recipient=data["recipient"],
+            signer=data["signer"],
+            contract_number=data.get("contract_number"),
+            contract_date=data.get("contract_date"),
+            pdf_folder_path=data.get("pdf_folder_path")
         )
         print(f"[2/6] Обработанный путь: {full_docx_path}")
         
@@ -129,6 +149,8 @@ async def extract_fields(request: Request):
                 for cell in row.cells:
                     matches = re.findall(r"\{(\w+)\}", cell.text)
                     fields.update(matches)
+
+        print(fields)
         
         return {"fields": list(fields)}
     
@@ -186,17 +208,31 @@ async def add_table_row(request: Request):
     row_number = len(table.rows)
     new_row = table.add_row()
     
-    # Заполняем ячейки по шаблону
     if len(new_row.cells) >= 4:
         new_row.cells[0].text = str(row_number)
-        new_row.cells[1].text = "{инженер.фио}"
-        new_row.cells[2].text = "{инженер.ноутбук}"
-        new_row.cells[3].text = "{1}"
+        new_row.cells[1].text = "{engineer_full_name}"
+        new_row.cells[2].text = "{engineer_notebook}"
+        new_row.cells[3].text = "{areas_name}"
         
-        # Устанавливаем высоту строки (в пунктах)
         for cell in new_row.cells:
-            cell.paragraphs[0].paragraph_format.space_after = Pt(0)
-            cell.paragraphs[0].paragraph_format.line_spacing = Pt(40)  # Высота строки
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.space_after = Pt(0)
+                paragraph.paragraph_format.line_spacing = Pt(40)
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     doc.save(data["docx_path"])
     return {"status": "success", "file_path": data["docx_path"]}
+
+@app.get("/api/engineers")
+async def get_engineers():
+    engineers = [
+        {"full_name": "Иванов И.И.", "notebook": "Lenovo X1"},
+        {"full_name": "Петров П.П.", "notebook": "Dell XPS"},
+        {"full_name": "Сидоров С.С.", "notebook": "MacBook Pro"}
+    ]
+    return {"engineers": engineers}
+
+@app.get("/api/areas")
+async def get_areas():
+    areas = ["Зона A", "Зона B", "Зона C", "Зона D"]
+    return {"areas": areas}

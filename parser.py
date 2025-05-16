@@ -6,6 +6,7 @@ from docx import Document
 from typing import Dict, List
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from typing import Optional 
 import pymorphy3 as pymorphy2
 
 morph = pymorphy2.MorphAnalyzer()
@@ -165,7 +166,7 @@ class PDFDataExtractor:
     def generate_documents_list(self):
         ks_list = []
         # sp_list = []
-        fixed_item = "Электронная версия {documentation_type} документации по проекту «Дооснащение подсистем безопасности кошек в обычной жизни ООО «Мяу мышь» на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э-{number_field} от {numbering_date}, экз. № {num_copies} только в адрес. "
+        fixed_item = "Электронная версия {documentation_type_second} документации по проекту «Дооснащение подсистем безопасности кошек в обычной жизни ООО «Мяу мышь» на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э-{number_field} от {numbering_date}, экз. № {num_copies} только в адрес. "
         ks_list.append(fixed_item)
         
         for doc in self.all_documents:
@@ -501,7 +502,14 @@ class DocxTemplateProcessor:
         return keys
  
 
-def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folder_path):
+def main(
+        docx_path: str,
+        recipient: str,
+        signer: str,
+        contract_number: Optional[str] = None,
+        contract_date: Optional[str] = None,
+        pdf_folder_path: Optional[str] = None
+        ) -> str:
     pdf_extractor = PDFDataExtractor()
     docx_processor = DocxTemplateProcessor()
 
@@ -516,7 +524,14 @@ def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folde
     }
     copies = 4
 
-    pdf_extractor.set_frontend_data(contract_number, contract_date, addressee, signer, copies)
+    pdf_extractor.set_frontend_data(
+        contract_number,
+        contract_date,
+        addressee,
+        signer,
+        copies
+    )
+
     docx_processor.add_frontend_data({
         'договор': {
             'номер': contract_number,
@@ -528,27 +543,24 @@ def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folde
     })
 
     pdf_files = []
-    for root, _, files in os.walk(pdf_folder_path):
-        pdf_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.pdf')])
-    
-    print(f"Найдено {len(pdf_files)} PDF файлов. Начинаю парсинг...")
-    
-    for pdf_file in pdf_files:
-        print(f"Парсинг файла: {pdf_file}")
-        parsed_data = pdf_extractor.parse_pdf(pdf_file)
-        docx_processor.add_parser_data(parsed_data)
-    
-    documents_list = pdf_extractor.generate_documents_list()
-    docx_processor.add_documents_list(documents_list)
-    print("\nСформированный список документов:\n")
-    print(documents_list)
-    
-
-    db_data = {
-        'ФИО': 'Иванов Иван Иванович',
-        'должность': 'Менеджер'
-    }
-    docx_processor.add_db_data(db_data)
+    if pdf_folder_path:
+        if not os.path.exists(pdf_folder_path):
+            raise ValueError(f"Путь к PDF не существует: {pdf_folder_path}")
+            
+        for root, _, files in os.walk(pdf_folder_path):
+            pdf_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.pdf')])
+        
+        print(f"Найдено {len(pdf_files)} PDF файлов. Начинаю парсинг...")
+        
+        for pdf_file in pdf_files:
+            print(f"Парсинг файла: {pdf_file}")
+            parsed_data = pdf_extractor.parse_pdf(pdf_file)
+            docx_processor.add_parser_data(parsed_data)
+        
+        documents_list = pdf_extractor.generate_documents_list()
+        docx_processor.add_documents_list(documents_list)
+        print("\nСформированный список документов:\n")
+        print(documents_list)    
 
     template_path = f"C:/Users/andre/Desktop/VIKKA{docx_path}"
     print(template_path)

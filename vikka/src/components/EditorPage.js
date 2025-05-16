@@ -29,6 +29,11 @@ const EditorPage = () => {
     const [initialFieldValues, setInitialFieldValues] = useState({});
     const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
 
+    const TARGET_TABLE_INDEX = 2;
+
+    const [engineers, setEngineers] = useState([]);
+    const [areas, setAreas] = useState([]);
+
     const [notification, setNotification] = useState({
         show: false,
         message: "",
@@ -37,6 +42,26 @@ const EditorPage = () => {
 
     const FIELD_TYPES = {
         data_field: {
+            type: "text",
+            placeholder: "Дата (ДД.ММ.ГГГГ)",
+            style: { 
+                height: "25px",
+                width: "140px",
+                fontStyle: "italic",
+                textAlign: "center"
+            }
+        },
+        data_start_field: {
+            type: "text",
+            placeholder: "Дата (ДД.ММ.ГГГГ)",
+            style: { 
+                height: "25px",
+                width: "140px",
+                fontStyle: "italic",
+                textAlign: "center"
+            }
+        },
+        data_end_field: {
             type: "text",
             placeholder: "Дата (ДД.ММ.ГГГГ)",
             style: { 
@@ -74,9 +99,18 @@ const EditorPage = () => {
                 textAlign: "center"
             }
         },
-        documentation_type: {
+        documentation_type_main: {
             type: "select",
-            options: ["", "рабочую", "исполнительную", "эксплутационную", "рабочую и исполнительную", "рабочую и эксплутационную", "исполнительную и эксплутацонную", "рабочую, исполнительную и эксплутационную"],
+            options: ["", "рабочую", "исполнительную", "эксплутационную", "рабочую и исполнительную", "рабочую и эксплутационную", "исполнительную и эксплутационную", "рабочую, исполнительную и эксплутационную"],
+            style: { 
+                height: "25px",
+                width: "140px",
+                textAlign: "center"
+            }
+        },
+        documentation_type_second: {
+            type: "select",
+            options: ["", "рабочей", "исполнительной", "эксплутационной", "рабочей и исполнительной", "рабочей и эксплутационной", "исполнительной и эксплутационной", "рабочей, исполнительной и эксплутационной"],
             style: { 
                 height: "25px",
                 width: "140px",
@@ -90,6 +124,34 @@ const EditorPage = () => {
                 height: "25px",
                 width: "50px",
                 textAlign: "center"
+            }
+        },
+        engineer_full_name: {
+            type: "select",
+            options: engineers,
+            linkedField: "engineer_notebook",
+            style: {
+                height: "25px",
+                width: "140px"
+            }
+        },
+        engineer_notebook: {
+            type: "text",
+            readOnly: true,
+            style: {
+                height: "25px",
+                width: "140px",
+                backgroundColor: "#f5f5f5",
+                fontStyle: "italic",
+                textAlign: "center"
+            }
+        },
+        areas_name: {
+            type: "text",
+            options: areas,
+            style: {
+                height: "25px",
+                width: "140px"
             }
         }
     };
@@ -140,7 +202,7 @@ const EditorPage = () => {
                     console.error("Не передан путь к документу");
                     return;
                 }
-
+                console.log(fullPath);
                 fullPath = fullPath.replace(/\\/g, "/");
 
                 if (!fullPath.startsWith("http")) {
@@ -165,6 +227,9 @@ const EditorPage = () => {
                 fields.forEach(field => {
                     initialValues[field] = "";
                 });
+
+                console.log("Engineers Data:", engineers);
+                console.log("Field Config:", FIELD_TYPES.engineer_full_name);
                 
                 setFieldValues(initialValues);
                 setInitialFieldValues({...initialValues});
@@ -177,9 +242,38 @@ const EditorPage = () => {
 
         loadDocxAndExtractFields();
     }, [isEditable]);
+   
 
+    useEffect(() => {
+        const loadEngineers = async () => {
+            try {
+                const response = await fetch("http://localhost:8000/api/engineers");
+                if (!response.ok) throw new Error("HTTP error");
+                const data = await response.json();
+                setEngineers(data.engineers.map(e => ({ 
+                    value: e.full_name, 
+                    label: e.full_name,
+                    notebook: e.notebook 
+                })));
+            } catch (error) {
+                console.error("Ошибка загрузки инженеров:", error);
+            }
+        };
+        loadEngineers();
+    }, []);
 
-
+    const normalizeOptions = (options) => {
+        return options.map(opt => {
+            if (typeof opt === 'string') {
+                return { value: opt, label: opt };
+            }
+            return {
+                value: opt.value || opt.id || opt.name || opt.full_name,
+                label: opt.label || opt.title || opt.name || opt.full_name,
+                ...opt
+            };
+        });
+    };
 
     const renderDocument = async (blob, isEditMode) => {       
         await renderAsync(blob, docxContainerRef.current, null, {
@@ -188,7 +282,7 @@ const EditorPage = () => {
             showHeader: true,
             showFooter: true
         });
-    
+
         const container = docxContainerRef.current;
         
         if (isEditMode) {
@@ -196,18 +290,29 @@ const EditorPage = () => {
             fields.forEach(field => {
                 const config = FIELD_TYPES[field] || { type: "text" };
                 const value = fieldValues[field] || "";
-                
+            
                 if (config.type === "select") {
+                    const normalizedOptions = normalizeOptions(config.options || []);
                     html = html.replace(
                         new RegExp(`\\{${field}\\}`, "g"),
                         `<select 
                             class="docx-field docx-select"
                             data-field="${field}"
+                            ${config.linkedField ? `data-linked="${config.linkedField}"` : ''}
                             style="${cssStyleToString(config.style)}"
                         >
-                            ${config.options.map(opt => 
-                                `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`
-                            ).join('')}
+                            ${normalizedOptions.map(opt => `
+                                <option 
+                                    value="${opt.value}" 
+                                    ${Object.entries(opt)
+                                        .filter(([key]) => !['value', 'label'].includes(key))
+                                        .map(([key, val]) => `data-${key}="${val}"`)
+                                        .join(' ')}
+                                    ${value === opt.value ? 'selected' : ''}
+                                >
+                                    ${opt.label}
+                                </option>
+                            `).join('')}
                         </select>`
                     );
                 } else {
@@ -220,6 +325,7 @@ const EditorPage = () => {
                             value="${value}"
                             placeholder="${config.placeholder || ''}"
                             style="${cssStyleToString(config.style)}"
+                            ${config.readOnly ? 'readonly' : ''}
                         />`
                     );
                 }
@@ -240,14 +346,19 @@ const EditorPage = () => {
                 select.style.textAlign = 'center';
                 select.addEventListener("change", (e) => {
                     const field = e.target.dataset.field;
+                    const selectedOption = e.target.selectedOptions[0];
+                    const notebook = selectedOption.dataset.notebook;
                     updateFieldValue(field, e.target.value);
+                    if (field === "engineer_full_name") {
+                        updateFieldValue("engineer_notebook", notebook);
+                    }
                 });
             });
-    
+
         } else {
             let html = container.innerHTML;
             html = html.replace(
-                /\{(data_field|contract_field|documentation_type|num_copies|number_field|numbering_date)\}/g, 
+                /\{(\w+)\}/g, 
                 (match, field) => `<span class="docx-template-field" data-field="${field}">${getFieldDisplayName(field)}</span>`
             );
             container.innerHTML = html;
@@ -357,9 +468,15 @@ const EditorPage = () => {
             'data_field': 'Дата письма',
             'contract_field': 'Номер письма',
             num_copies: 'Кол-во экземпляров',
-            documentation_type: 'тип документации',
+            documentation_type_main: 'тип документации',
+            documentation_type_second: 'тип документации',
             number_field: 'Учетный номер',
-            numbering_date: 'Дата'
+            numbering_date: 'Дата',
+            engineer_full_name: 'ФИО Инженера',
+            engineer_notebook: 'Ноутбук инженера',
+            areas_name: 'Название площадки',
+            data_start_field: 'Дата',
+            data_end_field: 'Дата'
         };
         return fieldNames[field] || field;
     };
@@ -388,69 +505,33 @@ const EditorPage = () => {
     };
 
     useEffect(() => {
-        const handleTableClick = (table, index) => {
-            tables.forEach(t => t.style.outline = "");
-            table.style.outline = "2px solid #0d6efd";
-            
-            
-            const rect = table.getBoundingClientRect();
+        if (!docxContainerRef.current) return;
+    
+        const tables = Array.from(docxContainerRef.current.querySelectorAll('table'));
+        
+        tables.forEach(table => {
+            table.style.outline = "none";
+            table.style.cursor = "default";
+        });
+    
+        if (isEditable && tables.length > TARGET_TABLE_INDEX) {
+            const targetTable = tables[TARGET_TABLE_INDEX];
+            targetTable.style.outline = "2px solid #ff9a68";
+            targetTable.style.cursor = "pointer";
+    
+            const rect = targetTable.getBoundingClientRect();
             setButtonPosition({
                 style: {
                     top: `${rect.bottom + window.scrollY + 5}px`,
                     left: `${rect.left + rect.width / 2}px`,
                     transform: 'translateX(-50%)'
                 },
-                tableIndex: index
+                tableIndex: TARGET_TABLE_INDEX
             });
-            
-            setSelectedTable(index);
-        };
-    
-        if (docxContainerRef.current && isEditable) {
-            const tablesInDoc = Array.from(docxContainerRef.current.querySelectorAll('table'));
-            tablesInDoc.forEach((table, index) => {
-                table.onclick = (e) => {
-                    e.stopPropagation();
-                    handleTableClick(table, index);
-                };
-            });
-            
-            setTables(tablesInDoc);
         }
-    
-        return () => {
-            tables.forEach(table => {
-                table.onclick = null;
-                table.style.outline = "";
-            });
-        };
-    }, [isEditable, tables]);
+    }, [isEditable, location.state?.fullDocxPath]);
 
-    const AddRowButton = ({ tableIndex, onAdd }) => {
-        return (
-            <div className="add-row-button" onClick={(e) => {
-                e.stopPropagation();
-                onAdd(tableIndex);
-            }}>
-                + Добавить строку
-            </div>
-        );
-    };
-
-    const handleAddRow = (tableIndex) => {
-        if (tableIndex !== 2) {
-            setNotification({
-                show: true,
-                message: "Строки можно добавлять только в указанную таблицу",
-                type: "warning"
-            });
-            return;
-        }
-    
-        handleAddTableRow(tableIndex);
-    };
-
-    const handleAddTableRow = async (tableIndex) => {
+    const handleAddRow = async () => {
         try {
             const backendPath = location.state?.fullDocxPath
                 .replace(/\\/g, "/")
@@ -461,15 +542,27 @@ const EditorPage = () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     docx_path: backendPath,
-                    table_index: tableIndex
+                    table_index: TARGET_TABLE_INDEX
                 }),
             });
     
             if (response.ok) {
                 const res = await fetch(`http://localhost:8000/${backendPath}`);
                 const blob = await res.arrayBuffer();
-                docxContainerRef.current.innerHTML = '';
-                await renderAsync(blob, docxContainerRef.current);
+                await renderDocument(blob, true);
+                
+                const tables = Array.from(docxContainerRef.current.querySelectorAll('table'));
+                if (tables.length > TARGET_TABLE_INDEX) {
+                    const rect = tables[TARGET_TABLE_INDEX].getBoundingClientRect();
+                    setButtonPosition({
+                        style: {
+                            top: `${rect.bottom + window.scrollY + 5}px`,
+                            left: `${rect.left + rect.width / 2}px`,
+                            transform: 'translateX(-50%)'
+                        },
+                        tableIndex: TARGET_TABLE_INDEX
+                    });
+                }
             }
         } catch (error) {
             setNotification({
@@ -481,10 +574,13 @@ const EditorPage = () => {
     };
 
     useEffect(() => {
-        if (!buttonPosition || !tables[buttonPosition.tableIndex]) return;
-
+        if (!buttonPosition) return;
+    
         const updatePosition = () => {
-            const table = tables[buttonPosition.tableIndex];
+            const tables = Array.from(docxContainerRef.current?.querySelectorAll('table') || []);
+            if (tables.length <= TARGET_TABLE_INDEX) return;
+    
+            const table = tables[TARGET_TABLE_INDEX];
             const rect = table.getBoundingClientRect();
             const scrollY = window.scrollY || window.pageYOffset;
             
@@ -497,9 +593,7 @@ const EditorPage = () => {
                 }
             }));
         };
-        
-        updatePosition();
-
+    
         window.addEventListener('scroll', updatePosition);
         window.addEventListener('resize', updatePosition);
         
@@ -507,7 +601,7 @@ const EditorPage = () => {
             window.removeEventListener('scroll', updatePosition);
             window.removeEventListener('resize', updatePosition);
         };
-    }, [buttonPosition, tables]);
+    }, [buttonPosition]);
 
 
 
@@ -657,18 +751,19 @@ const EditorPage = () => {
             </div>
         )}
 
-        {buttonPosition && (
+        {isEditable && buttonPosition && (
             <div 
                 className="add-row-button"
                 style={buttonPosition.style}
                 onClick={(e) => {
                     e.stopPropagation();
-                    handleAddRow(buttonPosition.tableIndex);
+                    handleAddRow();
                 }}
             >
                 + Добавить строку
             </div>
         )}
+        
       </div>
     );
   };

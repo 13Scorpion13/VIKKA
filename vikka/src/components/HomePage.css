@@ -90,6 +90,7 @@
   text-align: left;
   font-size: 18px;
   line-height: 1.2;
+  width: 220px;
 }
 
 .template-nav {
@@ -295,4 +296,17 @@
 
 .btn-primary:hover {
   background-color: #ee7e47;
+}
+
+.template-wrapper {
+  transition: transform 0.2s;
+}
+
+.template-wrapper:hover {
+  transform: translateY(-5px);
+}
+
+.template-card {
+  overflow: hidden;
+  border-radius: 8px;
 }

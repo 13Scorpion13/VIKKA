@@ -37,12 +37,26 @@ const HomePage = () => {
     const fetchTemplates = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('http://localhost:8000/api/templates/all');
-        const data = await response.json();
-        setAllTemplates(data);
-        
+        //const response = await fetch('http://localhost:8000/api/templates/all');
+        const [allResponse, recentResponse] = await Promise.all([
+          fetch('http://localhost:8000/api/templates/all'),
+          fetch('http://localhost:8000/api/templates/recent')
+        ])
+        //const data = await response.json();
+        const [allData, recentData] = await Promise.all([
+          allResponse.json(),
+          recentResponse.json()
+        ]);
         const savedRecent = JSON.parse(localStorage.getItem('recentTemplates')) || [];
-        setRecentTemplates(savedRecent);
+        const validRecent = savedRecent.filter(recentTemplate => 
+          allData.some(t => t.id === recentTemplate.id)
+        );
+
+        setAllTemplates(allData);
+        
+        //const savedRecent = JSON.parse(localStorage.getItem('recentTemplates')) || [];
+        setRecentTemplates(validRecent);
+        localStorage.setItem('recentTemplates', JSON.stringify(validRecent));
       } catch (error) {
         console.error('Error fetching templates:', error);
       } finally {
@@ -77,12 +91,16 @@ const HomePage = () => {
     });
   };
 
-
-
-
-  //const handleTemplateClick
   const handleConfirm = async () => {
     try {
+      if (!formData.recipient || !formData.signer) {
+        throw new Error('Заполните обязательные поля: Адресат и Подписант');
+      }
+
+      if (selectedTemplate.form_type === 'full' && 
+        (!formData.contractNumber || !formData.contractDate || !formData.fileLink)) {
+        throw new Error('Заполните все поля для выбранного шаблона');
+      }
       setIsLoading(true);
       setShowModal(false);
       //setSelectedTemplate(template);
@@ -95,14 +113,20 @@ const HomePage = () => {
       setRecentTemplates(updatedRecent);
       localStorage.setItem('recentTemplates', JSON.stringify(updatedRecent));
 
-      const payload = {
-        docx_path: selectedTemplate.document_path,           // путь к шаблону
-        contract_number: formData.contractNumber,            // номер договора
-        contract_date: formData.contractDate,                // дата договора
-        recipient: formData.recipient,                       // адресат
-        signer: formData.signer,                             // подписант
-        pdf_folder_path: formData.fileLink                   // путь к папке с PDF
-      };
+      const payload = selectedTemplate.form_type === 'full' 
+        ? { 
+            docx_path: selectedTemplate.document_path,
+            recipient: formData.recipient,
+            signer: formData.signer,
+            contract_number: formData.contractNumber,
+            contract_date: formData.contractDate,
+            pdf_folder_path: formData.fileLink
+          }
+        : {
+            docx_path: selectedTemplate.document_path,
+            recipient: formData.recipient,
+            signer: formData.signer
+          };
 
       const response = await fetch('http://localhost:8000/api/process-document/', {
         method: 'POST',
@@ -220,11 +244,10 @@ const HomePage = () => {
               </button>
             </div>
             <div className="d-flex justify-content-start flex-nowrap gap-4">
-              {recentTemplates.map((tpl, index) => (
+              {recentTemplates.map((tpl) => (
                   <div 
-                    key={`recent-${tpl.id || index}`} 
+                    key={`recent-${tpl.id}`} 
                     className="template-wrapper"
-                    /* onClick={() => handleTemplateClick(tpl)} */
                     onClick={(e) => {
                       e.preventDefault();
                       handleTemplateClick(tpl);
@@ -234,8 +257,9 @@ const HomePage = () => {
                     <div className="template-card shadow">
                       <img 
                         src={`http://localhost:8000/preview/${tpl.preview_image}`}
-                        alt={tpl.title}
+                        alt={`Превью шаблона: ${tpl.title}`}
                         className="img-fluid template-preview"
+                        loading="lazy"
                         onError={(e) => e.target.src = '/placeholder.png'}
                       />
                     </div>
@@ -303,12 +327,11 @@ const HomePage = () => {
               <img src={arrowIcon} style={{ transform: 'rotate(180deg)' }} />
             </button>
           </div>
-          <div className="d-flex gap-4 flex-wrap">
+          <div className="d-flex justify-content-start flex-nowrap">
             {displayedAllTemplates.map((tpl, index) => (
                 <div 
                   key={`all-${tpl.id || index}`}
                   className="template-wrapper"
-                  /* onClick={() => handleTemplateClick(tpl)} */
                   onClick={(e) => {
                     e.preventDefault();
                     handleTemplateClick(tpl);
@@ -323,7 +346,7 @@ const HomePage = () => {
                       onError={(e) => e.target.src = '/placeholder.png'}
                     />
                   </div>
-                <div className="template-info-dark mt-2 text-center">
+                <div className="template-info-dark mt-2 w-75 text-center">
                   <strong>{tpl.title}</strong>
                 </div>
               </div>
@@ -347,35 +370,40 @@ const HomePage = () => {
           <div className="modal-content">
             <h3>Заполните данные</h3>
             <div className="modal-form">
-              <div className="form-group">
-                <label>Номер и дата договора</label>
-                <input
-                  type="text"
-                  name="contractNumber"
-                  value={formData.contractNumber}
-                  onChange={handleFormChange}
-                  placeholder="Номер договора"
-                />
-                <input
-                  type="date"
-                  name="contractDate"
-                  value={formData.contractDate}
-                  onChange={handleFormChange}
-                  className="mt-2"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Ссылка на файлы с приложениями</label>
-                <input
-                  type="text"
-                  name="fileLink"
-                  value={formData.fileLink}
-                  onChange={handleFormChange}
-                  placeholder="Укажите путь к файлу"
-                />
-              </div>
-              
+              {selectedTemplate?.form_type === 'full' ? (
+                <>
+                  <div className="form-group">
+                    <label>Номер и дата договора</label>
+                    <input
+                      type="text"
+                      name="contractNumber"
+                      value={formData.contractNumber}
+                      onChange={handleFormChange}
+                      placeholder="Номер договора"
+                    />
+                    <input
+                      type="date"
+                      name="contractDate"
+                      value={formData.contractDate}
+                      onChange={handleFormChange}
+                      className="mt-2"
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>Ссылка на файлы с приложениями</label>
+                    <input
+                      type="text"
+                      name="fileLink"
+                      value={formData.fileLink}
+                      onChange={handleFormChange}
+                      placeholder="Укажите путь к файлу"
+                    />
+                  </div>
+                </>
+              ) : null}
+
+              {/* Общие поля для всех форм */}
               <div className="form-group">
                 <label>Адресат</label>
                 <input

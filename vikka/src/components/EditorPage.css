@@ -243,14 +243,6 @@
     background: #0b5ed7;
 }
 
-.docx-wrapper table {
-    transition: outline 0.2s;
-}
-
-.docx-wrapper table:hover {
-    outline: 2px solid #ff9a68;
-}
-
 @keyframes fadeIn {
     from { opacity: 0; transform: translateX(-50%) translateY(10px); }
     to { opacity: 1; transform: translateX(-50%) translateY(0); }
