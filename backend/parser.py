@@ -3,10 +3,16 @@ import fitz
 import re
 import pdfplumber
 from docx import Document
-from typing import Dict, List
+from typing import Dict, List, Optional
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
+RUSSIAN_CITIES = {
+        'моск', 'санкт-петербур', 'новосибирск', 'екатеринбур', 'казан',
+        'новгород', 'челябинск', 'самара', 'омск', 'ростов-на-дону',
+        'уфа', 'красноярск', 'пермь', 'воронеж', 'волгоград', 'саратов', "сургут"
+        # ... добавьте другие при необходимости
+    }
 class PDFDataExtractor:
     def __init__(self):
         self.parsed_data = {}
@@ -67,34 +73,80 @@ class PDFDataExtractor:
         
         return " ".join(formatted_words)
 
-    def clean_text(self, text: str) -> str:       
-        lines = text.split("\n")
-        cleaned_lines = [line.strip() for line in lines if line.strip()]  
-        return "\n".join(cleaned_lines) 
+    
+
 
     def extract_title_and_text(self, pdf_path: str) -> tuple:
+        def capitalize_russian_city(text: str) -> str:
+            """Заменяет корень города на правильный регистр (например: сургутского -> Сургутского)."""
+            for city in RUSSIAN_CITIES:
+                pattern = re.compile(city, flags=re.IGNORECASE)
+                matches = list(pattern.finditer(text))
+                for match in matches:
+                    start, end = match.span()
+                    matched_part = text[start:end]
+                    # Заменяем только ту часть, которая совпала с корнем города, но сохраняем окончания
+                    text = text[:start] + city.title() + text[end:]
+            return text
         with pdfplumber.open(pdf_path) as pdf:
             page = pdf.pages[0]  
-            lines = page.extract_text().split("\n")[:-1]  
+            lines = page.extract_text().split("\n")[:-1] 
+            lines = [
+                line for line in lines
+                if len(re.sub(r'[^А-Яа-яA-Za-z]', '', line)) > 2
+            ]
 
+            lines = [line.replace(".в ", "") for line in lines]
+            special_abbrs = {"АСУ", "ТП", "ТР", "ГКС", "СЗСК", "КИИ", "ЗСК"}
             highlighted_lines = []
             is_title = False
             idx_ooo = 0
+
             for i, line in enumerate(lines):
                 idx_ooo -= 1
                 if line.isupper():
                     is_title = True
-                if line.startswith("ООО"):
+                if "ООО" in line:
                     idx_ooo += i
-                    start = line.find('«') + 1
-                    end = line.find('»')                    
-                    if start != -1 and end != -1:
-                        quoted_text = line[start:end]                       
-                        quoted_text = quoted_text[0].upper() + quoted_text[1:].lower()
-                        text = line[:start] + quoted_text + line[end:]
+                    before_ooo = ""
+                    after_ooo = ""
+
+                    if i > 0 and '«' in lines[i - 1] and '»' in lines[i - 1]:
+                        prev_line = lines[i - 1]
+                        start = prev_line.find('«') + 1
+                        end = prev_line.find('»')
+                        quoted = prev_line[start:end]
+                        corrected = ' '.join([word.capitalize() for word in quoted.split()])
+                        lines[i - 1] = prev_line[:start] + corrected + prev_line[end:]
+
+                    parts = line.split("ООО", 1)
+                    if len(parts) == 2:
+                        before_ooo = parts[0].strip()
+                        after_ooo = parts[1].strip()
+
+                        if '«' in after_ooo and '»' in after_ooo:
+                            start = after_ooo.find('«') + 1
+                            end = after_ooo.find('»')
+                            quoted = after_ooo[start:end]
+                            words = quoted.split()
+                            corrected = ''
+                            for idx_word, word in enumerate(words):
+                                if idx_word == 1:
+                                    corrected += word.lower()
+                                else:
+                                    corrected += word.capitalize()
+                                if idx_word < len(words) - 1:
+                                    corrected += ' '
+                            after_ooo = after_ooo[:start] + corrected + after_ooo[end:]
+
+                        text = before_ooo + ' ООО ' + after_ooo
+                    else:
+                        text = line
+
                     highlighted_lines.append(text)
                     continue
-                if line.isupper() and any(char.isdigit() for char in line):
+
+                if line.isupper() and sum(char.isdigit() for char in line) >= 3:
                     highlighted_lines.append(line)
                     continue
                 if line.isupper():
@@ -102,11 +154,52 @@ class PDFDataExtractor:
                     continue
                 if not line.isupper() and is_title:
                     highlighted_lines.append(line)
-        
+
         highlighted_lines[0] = highlighted_lines[0].capitalize()
         highlighted_lines[idx_ooo + 1] = highlighted_lines[idx_ooo + 1].capitalize()
-        
-        return " ".join(highlighted_lines[:idx_ooo + 1]), "\n".join(highlighted_lines[idx_ooo + 1:])
+
+        title_lines = highlighted_lines[:idx_ooo + 1]
+        text_lines = highlighted_lines[idx_ooo + 1:]
+
+        for i in range(len(title_lines)):
+            line = title_lines[i]
+            for abbr in special_abbrs:
+                pattern = re.compile(rf'\b{abbr.lower()}\b', re.IGNORECASE)
+                line = pattern.sub(abbr, line)
+            line = capitalize_russian_city(line)
+            title_lines[i] = line
+
+        for i in range(len(text_lines)):
+            line = text_lines[i].strip()
+
+            if len(line) < 3:
+                text_lines[i] = ''
+                continue
+
+            for abbr in special_abbrs:
+                pattern = re.compile(rf'\b{abbr.lower()}\b', re.IGNORECASE)
+                line = pattern.sub(abbr, line)
+
+            line = capitalize_russian_city(line)
+            text_lines[i] = line
+
+        for i in range(len(text_lines) - 1):
+            current = text_lines[i].rstrip()
+            next_line = text_lines[i + 1].lstrip()
+
+            if not current or current.endswith('.'):
+                continue
+
+            next_first_word = next_line.split()[0] if next_line else ""
+            is_abbreviation = next_first_word.upper() in special_abbrs
+
+            if next_line.startswith("Том "):
+                text_lines[i] = current + ','
+            elif next_first_word and next_first_word[0].isupper() and not is_abbreviation:
+                text_lines[i] = current + '.'
+
+        return " ".join(title_lines), "\n".join(text_lines)
+
 
     def extract_kt_data(self, first_page: str, last_page: str, pdf_path: str) -> dict:
         title, remaining_text = self.extract_title_and_text(pdf_path)
@@ -161,15 +254,22 @@ class PDFDataExtractor:
     def generate_documents_list(self):
         ks_list = []
         # sp_list = []
-        fixed_item = "Электронная версия рабочей документации по проекту «Дооснащение подсистем безопасности кошек в обычной жизни ООО «Мяу мышь» на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э 459 от 26.03.2025(календарь), экз. № 1/1(человек должен задать отдельно для дисков и бумажной документации) только в адрес. "
+
+        fixed_item = "Электронная версия {documentation_type_second} документации по проекту «Дооснащение подсистем безопасности кошек в обычной жизни ООО «Мяу мышь» на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э-{number_field} от {numbering_date}, экз. № {num_copies} только в адрес. "
         ks_list.append(fixed_item)
         
+        fixed_item_added = False 
         for doc in self.all_documents:
+            if not fixed_item_added:
+                fixed_item = f"Электронная версия {{documentation_type_second}} документации по проекту «{doc['названиедокумента']} на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э 459 от 26.03.2025(календарь), экз. № 1/1(человек должен задать отдельно для дисков и бумажной документации) только в адрес. "
+                ks_list.append(fixed_item)
+                fixed_item_added = True
+
             if doc['типдокумента'] == 'КТ':
-                ks_entry = f"{doc['названиедокумента']}, Том 1, коммерческая тайна, Уч. № {doc['учетныйномер']} от {doc['датадокумента']}, экз. №№ {doc['экземпляры']} на {doc['количестволистов']} л. каждый, только в адрес."
+                ks_entry = f"{doc['текстдокумента']}, коммерческая тайна, Уч. № {doc['учетныйномер']} от {doc['датадокумента']}, экз. №№ 1/1-1/{self.frontend_data['экземпляры']} на {doc['количестволистов']} л. каждый, только в адрес."
                 ks_list.append(ks_entry)
             elif doc['типдокумента'] == 'СП':
-                sp_entry = f"{doc['названиедокумента']}, инв. № {doc['инвентарныйномер']} - на {doc['количествостраниц']} л. в  {self.frontend_data['экземпляры']} экз."
+                sp_entry = f"{doc['текстдокумента']}, инв. № {doc['инвентарныйномер']} - на {doc['количествостраниц']} л. в  {self.frontend_data['экземпляры']} экз."
                 ks_list.append(sp_entry)   #sp_list.append(sp_entry)
         
         # result = ""
@@ -205,7 +305,47 @@ class DocxTemplateProcessor:
         """Добавляет список документов."""
         self.data_sources['списокдокументов'] = documents_list
 
-    
+    def _format_fio(self, fio: str, format_key: str) -> str:
+        """Форматирует ФИО в зависимости от регистра символов в ключе"""
+        if not fio:
+            return ""
+        
+        parts = [p.strip() for p in fio.split() if p.strip()]
+        if not parts:
+            return ""
+
+        # Получаем часть ключа до "_из_формы" и убираем фигурные скобки
+        format_part = format_key.split('_')[0].split('.')[-1].replace('{', '').replace('}', '')
+
+        match format_part:
+            case 'ФИО':
+                return " ".join(parts)  # Полное ФИО: Фамилия Имя Отчество
+            case 'ФИо':
+                if len(parts) >= 3:
+                    return f"{parts[0]} {parts[1]} {parts[2][0]}."
+                elif len(parts) == 2:
+                    return f"{parts[0]} {parts[1]}"
+                return parts[0]
+            case 'Фио':
+                if len(parts) >= 3:
+                    return f"{parts[0]} {parts[1][0]}.{parts[2][0]}."
+                elif len(parts) == 2:
+                    return f"{parts[0]} {parts[1][0]}."
+                return parts[0]
+            case 'иоФ':
+                if len(parts) >= 3:
+                    return f"{parts[1][0]}.{parts[2][0]}. {parts[0]}"
+                elif len(parts) == 2:
+                    return f"{parts[1][0]}. {parts[0]}"
+                return parts[0]
+            case 'ИО':
+                if len(parts) >= 3:
+                    return f"{parts[1]} {parts[2]}"
+                elif len(parts) >= 2:
+                    return parts[1]
+                return parts[0]
+            case _:
+                return " ".join(parts)  # По умолчанию — полное ФИО
         
     def process_template(self, template_path: str, output_path: str):
         """Обрабатывает шаблон с выравниванием по ширине и заданными отступами"""
@@ -317,35 +457,47 @@ class DocxTemplateProcessor:
                                 for paragraph in cell.paragraphs:
                                     self._replace_in_paragraph(paragraph)
 
-    # def _process_list_number(self, suka):
-    #     ...
-
     def _replace_in_paragraph(self, paragraph):
-        """Заменяет ключи в параграфе с сохранением форматирования."""
+        """Заменяет ключи с учетом любых форматов ФИО"""
         keys = self._find_all_keys(paragraph.text)
         if not keys:
             return
 
         runs = paragraph.runs
-        if not runs:
-            return
-
         full_text = ''.join(run.text for run in runs)
-        if not full_text:
-            return
-
+        
         for key, key_info in keys.items():
+            if not key_info:
+                continue
+                
             replacement = ""
             source_data = self.data_sources.get(key_info['source'], {})
-
-            # Обработка сложных ключей вида {названиедокумента_из_парсера} или {адресат.фио_из_формы}
-            if 'object' in key_info:
-                if key_info['field']:  # если есть точка (второй группе)
+            
+            # Обработка всех вариантов ключей ФИО
+            if any(fio_key in key.lower() for fio_key in ['фио', 'иоф', 'ио', 'фИО', 'ФИО']):
+                # Для ключей вида {ФИО_из_бд}
+                if key_info['source'] == 'бд' and key_info.get('object', '').upper() == 'ФИО':
+                    replacement = str(source_data.get(key_info['object'], ""))
+                
+                # Для вложенных ключей {адресат.Фио_из_формы}
+                elif 'object' in key_info:
                     obj = source_data.get(key_info['object'], {})
-                    replacement = str(obj.get(key_info['field'], ""))
+                    if isinstance(obj, dict):
+                        fio_value = str(obj.get('фио', ""))
+                    else:
+                        fio_value = str(obj) if obj else ""
+                    replacement = self._format_fio(fio_value, key)
+            
+            # Остальные ключи
+            elif 'object' in key_info:
+                if key_info.get('field'):
+                    obj = source_data.get(key_info['object'], {})
+                    if isinstance(obj, dict):
+                        replacement = str(obj.get(key_info['field'], ""))
+                    else:
+                        replacement = str(obj) if obj else ""
                 else:
                     replacement = str(source_data.get(key_info['object'], ""))
-            # Обработка вложенных ключей вида {договор.номер}
             elif '.' in key_info.get('key', ''):
                 parts = key_info['key'].split('.')
                 current = source_data
@@ -356,20 +508,18 @@ class DocxTemplateProcessor:
                         current = ""
                         break
                 replacement = str(current)
-            else:  # Простые ключи
-                replacement = str(source_data.get(key_info['key'], ""))
+            else:
+                replacement = str(source_data.get(key_info.get('key', ""), ""))
 
+            print(f"Processing key: {key} → {replacement}")
             full_text = full_text.replace(key, replacement)
 
-        # Обновляем текст с сохранением форматирования
+        # Обновляем текст
         for run in runs:
             run.text = ""
-        
         if runs:
             runs[0].text = full_text
-            for run in runs[1:]:
-                self._copy_run_formatting(runs[0], run)
-
+    
     def _copy_run_formatting(self, source_run, target_run):
         """Копирует форматирование из одного run в другой."""
         target_run.bold = source_run.bold
@@ -383,22 +533,22 @@ class DocxTemplateProcessor:
     def _find_all_keys(self, text: str) -> Dict[str, dict]:
         keys = {}
         
-        # 1. Обрабатываем сложные ключи вида {адресат.фио_из_формы} или {названиедокумента_из_парсера}
+        # 1. Обрабатываем сложные ключи вида {адресат.Фио_из_формы}
         complex_pattern = re.compile(r'\{([^}.]+)(?:\.([^}_]+))?_из_([^}]+)\}')
         for match in complex_pattern.finditer(text):
             full_key = match.group(0)
-            object_name = match.group(1)  # например, "адресат" или "названиедокумента"
-            field_name = match.group(2)   # например, "фио" (может быть None)
-            source = match.group(3)       # например, "формы" или "парсера"
+            object_name = match.group(1)  # "адресат"
+            field_name = match.group(2)   # "Фио"
+            source = match.group(3)       # "формы"
             
             keys[full_key] = {
                 'found': True,
                 'source': source,
                 'object': object_name,
-                'field': field_name
+                'field': field_name.lower() if field_name else None # Приводим к нижнему регистру для унификации
             }
 
-        # 2. Обрабатываем простые ключи вида {номердоговора} или {списокдокументов:}
+        # 2. Обрабатываем простые ключи вида {номердоговора}
         simple_pattern = re.compile(r'\{([^}:]+)(?::)?\}')
         for match in simple_pattern.finditer(text):
             full_key = match.group(0)
@@ -436,21 +586,36 @@ class DocxTemplateProcessor:
         return keys
  
 
-def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folder_path):
+def main(
+        docx_path: str,
+        recipient: str,
+        signer: str,
+        contract_number: Optional[str] = None,
+        contract_date: Optional[str] = None,
+        pdf_folder_path: Optional[str] = None
+        ) -> str:
     pdf_extractor = PDFDataExtractor()
     docx_processor = DocxTemplateProcessor()
 
     addressee = {
         'фио': recipient,
-        'должность': 'Заместителю генерального директора ООО «Мяу Кусь»'
+        'должность': 'Заместителю генерального директора',
+        'организация': 'ООО «Мяу Кусь»'
     }
     signer = {
         'фио': signer,
         'должность': 'Генеральный директор'
     }
     copies = 4
+    
+    pdf_extractor.set_frontend_data(
+        contract_number,
+        contract_date,
+        addressee,
+        signer,
+        copies
+    )
 
-    pdf_extractor.set_frontend_data(contract_number, contract_date, addressee, signer, copies)
     docx_processor.add_frontend_data({
         'договор': {
             'номер': contract_number,
@@ -462,32 +627,31 @@ def main(docx_path, contract_number, contract_date, recipient, signer, pdf_folde
     })
 
     pdf_files = []
-    pdf_folder_path = "./pdfs"
-    for root, _, files in os.walk(pdf_folder_path):
-        pdf_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.pdf')])
-    
-    print(f"Найдено {len(pdf_files)} PDF файлов. Начинаю парсинг...")
-    
-    for pdf_file in pdf_files:
-        print(f"Парсинг файла: {pdf_file}")
-        parsed_data = pdf_extractor.parse_pdf(pdf_file)
-        docx_processor.add_parser_data(parsed_data)
-    
-    documents_list = pdf_extractor.generate_documents_list()
-    docx_processor.add_documents_list(documents_list)
-    print("\nСформированный список документов:\n")
-    print(documents_list)
-    
+    pdf_folder_path = r"/app/pdfs"
+    if pdf_folder_path:
+        if not os.path.exists(pdf_folder_path):
+            raise ValueError(f"Путь к PDF не существует: {pdf_folder_path}")
+            
+        for root, _, files in os.walk(pdf_folder_path):
+            pdf_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.pdf')])
+        
+        print(f"Найдено {len(pdf_files)} PDF файлов. Начинаю парсинг...")
+        
+        for pdf_file in pdf_files:
+            print(f"Парсинг файла: {pdf_file}")
+            parsed_data = pdf_extractor.parse_pdf(pdf_file)
+            docx_processor.add_parser_data(parsed_data)
+        
+        documents_list = pdf_extractor.generate_documents_list()
+        docx_processor.add_documents_list(documents_list)
+        print("\nСформированный список документов:\n")
+        print(documents_list) 
 
-    db_data = {
-        'ФИО': 'Иванов Иван Иванович',
-        'должность': 'Менеджер'
-    }
-    docx_processor.add_db_data(db_data)
-
-    template_path = f"static/{docx_path}"
+    template_path = f"static{docx_path}"
     print(template_path)
-    output_path = r"static\converted_files\template.docx"
+    
+    original_filename = os.path.basename(docx_path)
+    output_path = os.path.join("static/converted_files", original_filename)
     docx_processor.process_template(template_path, output_path)
     print(f"\nДокумент сохранен как {output_path}")
     return output_path

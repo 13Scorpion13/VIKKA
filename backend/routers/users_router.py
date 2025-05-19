@@ -81,7 +81,7 @@ async def register_user(
         result = await session.execute(query)
         new_user_id = result.scalar_one()
         await session.commit()
-
+        
         new_user = await get_user_by_id(session, new_user_id)
         return new_user
 

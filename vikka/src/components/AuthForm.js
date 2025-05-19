@@ -31,8 +31,11 @@ const AuthForm = () => {
 
       const result = await response.json();
       if (response.ok) {
+        // const result = await response.json();
         alert("Успешная авторизация!");
-        navigate("/home");
+        navigate("/home", { state: {
+          userInfo: result.user
+        }});
       } else {
         setError(result.message || "Ошибка авторизации");
       }

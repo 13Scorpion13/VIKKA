@@ -8,6 +8,7 @@ class TemplateCreate(BaseModel):
     document_path: str
     last_modified: datetime
     author_id: int
+    form_type: str
 
 
 class TemplateUpdate(BaseModel):
@@ -24,6 +25,7 @@ class TemplateRead(BaseModel):
     preview_image: str
     document_path: str
     last_modified: datetime
+    form_type: str
 
     class Config:
         from_attributes = True
@@ -127,7 +129,6 @@ class LetterHistoryCreate(BaseModel):
     template_id: int
     file_path: str
     adressee_id: int
-    date: datetime
 
 
 class LetterHistoryUpdate(BaseModel):
@@ -143,7 +144,7 @@ class LetterHistoryRead(BaseModel):
     user_id: int
     signer_id: int
     template_id: int
-    # file_path: str
+    file_path: str
     date: datetime
     adressee_id: int
 

@@ -24,7 +24,7 @@ services:
       - "8000:8000"
     volumes:
       - ./static:/app/static
-      - C:/Users/User1/Desktop/Tasks/1/Test:/app/pdfs
+      - c:/Users/user/Desktop/132/Test:/app/pdfs
     networks:
       - vikka_network
   

@@ -9,6 +9,7 @@ template = Table(
     Column("title", String(100)),
     Column("preview_image", String(255)),
     Column("document_path", String(255)),
+    Column("form_type", String(50)),
     Column("last_modified", DateTime, default=datetime.utcnow),
     Column("author_id", Integer, ForeignKey("users.id", ondelete="CASCADE")),
     # Column("date", DateTime, default=datetime.utcnow)

@@ -3,7 +3,7 @@
 }
 
 .recent-templates {
-  background-color: #FF833A;
+  background-color: #ff9a68;
   color: white;
   padding: 60px;
   margin-top: 50px;
@@ -90,6 +90,7 @@
   text-align: left;
   font-size: 18px;
   line-height: 1.2;
+  width: 220px;
 }
 
 .template-nav {
@@ -102,7 +103,7 @@
 
 .arrow-button {
   background-color: white;
-  color: #FF833A;
+  color: #ff9a68;
   border-radius: 8px;
   border: none;
   width: 50px;
@@ -125,7 +126,7 @@
 }
 
 .arrow-button.orange {
-  background-color: #FF833A;
+  background-color: #ff9a68;
   color: white;
 }
 
@@ -195,7 +196,7 @@
 .orange-circle-group-left .circle,
 .orange-circle-group-right .circle {
   position: absolute;
-  border: 1px solid #FF833A;
+  border: 1px solid #ff9a68;
   border-radius: 50%;
   background: transparent;
 }
@@ -279,10 +280,33 @@
 }
 
 .btn-secondary {
-  background-color: #f0f0f0;
+  background-color: #c7bfbf;
+  width: 120px;
+}
+
+.btn-secondary:hover {
+  background-color: #979696;
 }
 
 .btn-primary {
-  background-color: #FF833A;
+  background-color: #ff9a68;
   color: white;
+  width: 120px;
+}
+
+.btn-primary:hover {
+  background-color: #ee7e47;
+}
+
+.template-wrapper {
+  transition: transform 0.2s;
+}
+
+.template-wrapper:hover {
+  transform: translateY(-5px);
+}
+
+.template-card {
+  overflow: hidden;
+  border-radius: 8px;
 }
