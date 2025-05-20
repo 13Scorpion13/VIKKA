@@ -6,6 +6,9 @@ from docx import Document
 from typing import Dict, List, Optional
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+import pymorphy3 as pymorphy2
+
+morph = pymorphy2.MorphAnalyzer()
 
 RUSSIAN_CITIES = {
         'моск', 'санкт-петербур', 'новосибирск', 'екатеринбур', 'казан',
@@ -85,9 +88,20 @@ class PDFDataExtractor:
                 for match in matches:
                     start, end = match.span()
                     matched_part = text[start:end]
-                    # Заменяем только ту часть, которая совпала с корнем города, но сохраняем окончания
                     text = text[:start] + city.title() + text[end:]
             return text
+
+        def process_quoted_text(text: str) -> str:
+            """Обрабатывает текст в кавычках, делая каждое слово с заглавной буквы"""
+            if '«' in text and '»' in text:
+                start = text.find('«') + 1
+                end = text.find('»')
+                quoted = text[start:end]
+                # Разбиваем на слова и делаем каждое слово с заглавной буквы
+                processed = ' '.join([word.capitalize() for word in quoted.split()])
+                return text[:start] + processed + text[end:]
+            return text
+
         with pdfplumber.open(pdf_path) as pdf:
             page = pdf.pages[0]  
             lines = page.extract_text().split("\n")[:-1] 
@@ -97,7 +111,7 @@ class PDFDataExtractor:
             ]
 
             lines = [line.replace(".в ", "") for line in lines]
-            special_abbrs = {"АСУ", "ТП", "ТР", "ГКС", "СЗСК", "КИИ", "ЗСК"}
+            special_abbrs = {"АСУ", "ТП", "ТР", "ГКС", "СЗСК", "КИИ", "ЗСК", "ЛПУМГ"}
             highlighted_lines = []
             is_title = False
             idx_ooo = 0
@@ -106,46 +120,32 @@ class PDFDataExtractor:
                 idx_ooo -= 1
                 if line.isupper():
                     is_title = True
+                
+                # Обрабатываем строки с ООО
                 if "ООО" in line:
                     idx_ooo += i
-                    before_ooo = ""
-                    after_ooo = ""
-
-                    if i > 0 and '«' in lines[i - 1] and '»' in lines[i - 1]:
-                        prev_line = lines[i - 1]
-                        start = prev_line.find('«') + 1
-                        end = prev_line.find('»')
-                        quoted = prev_line[start:end]
-                        corrected = ' '.join([word.capitalize() for word in quoted.split()])
-                        lines[i - 1] = prev_line[:start] + corrected + prev_line[end:]
-
+                    
+                    # Обрабатываем предыдущую строку, если она содержит кавычки
+                    if i > 0 and ('«' in lines[i-1] or '»' in lines[i-1]):
+                        lines[i-1] = process_quoted_text(lines[i-1])
+                    
+                    # Разделяем строку на части до и после ООО
                     parts = line.split("ООО", 1)
                     if len(parts) == 2:
                         before_ooo = parts[0].strip()
                         after_ooo = parts[1].strip()
-
-                        if '«' in after_ooo and '»' in after_ooo:
-                            start = after_ooo.find('«') + 1
-                            end = after_ooo.find('»')
-                            quoted = after_ooo[start:end]
-                            words = quoted.split()
-                            corrected = ''
-                            for idx_word, word in enumerate(words):
-                                if idx_word == 1:
-                                    corrected += word.lower()
-                                else:
-                                    corrected += word.capitalize()
-                                if idx_word < len(words) - 1:
-                                    corrected += ' '
-                            after_ooo = after_ooo[:start] + corrected + after_ooo[end:]
-
+                        
+                        # Обрабатываем текст в кавычках после ООО
+                        after_ooo = process_quoted_text(after_ooo)
+                        
                         text = before_ooo + ' ООО ' + after_ooo
                     else:
                         text = line
-
+                    
                     highlighted_lines.append(text)
                     continue
 
+                # Остальная обработка строк...
                 if line.isupper() and sum(char.isdigit() for char in line) >= 3:
                     highlighted_lines.append(line)
                     continue
@@ -155,50 +155,29 @@ class PDFDataExtractor:
                 if not line.isupper() and is_title:
                     highlighted_lines.append(line)
 
-        highlighted_lines[0] = highlighted_lines[0].capitalize()
-        highlighted_lines[idx_ooo + 1] = highlighted_lines[idx_ooo + 1].capitalize()
+            # Обработка первой строки и строки с ООО
+            if highlighted_lines:
+                highlighted_lines[0] = highlighted_lines[0].capitalize()
+            if idx_ooo + 1 < len(highlighted_lines):
+                highlighted_lines[idx_ooo + 1] = highlighted_lines[idx_ooo + 1].capitalize()
 
-        title_lines = highlighted_lines[:idx_ooo + 1]
-        text_lines = highlighted_lines[idx_ooo + 1:]
+            # Разделение на заголовок и текст
+            title_lines = highlighted_lines[:idx_ooo + 1]
+            text_lines = highlighted_lines[idx_ooo + 1:]
 
-        for i in range(len(title_lines)):
-            line = title_lines[i]
-            for abbr in special_abbrs:
-                pattern = re.compile(rf'\b{abbr.lower()}\b', re.IGNORECASE)
-                line = pattern.sub(abbr, line)
-            line = capitalize_russian_city(line)
-            title_lines[i] = line
+            # Дополнительная обработка аббревиатур и городов
+            for i in range(len(title_lines)):
+                line = title_lines[i]
+                for abbr in special_abbrs:
+                    pattern = re.compile(rf'\b{abbr.lower()}\b', re.IGNORECASE)
+                    line = pattern.sub(abbr, line)
+                line = capitalize_russian_city(line)
+                title_lines[i] = line
 
-        for i in range(len(text_lines)):
-            line = text_lines[i].strip()
-
-            if len(line) < 3:
-                text_lines[i] = ''
-                continue
-
-            for abbr in special_abbrs:
-                pattern = re.compile(rf'\b{abbr.lower()}\b', re.IGNORECASE)
-                line = pattern.sub(abbr, line)
-
-            line = capitalize_russian_city(line)
-            text_lines[i] = line
-
-        for i in range(len(text_lines) - 1):
-            current = text_lines[i].rstrip()
-            next_line = text_lines[i + 1].lstrip()
-
-            if not current or current.endswith('.'):
-                continue
-
-            next_first_word = next_line.split()[0] if next_line else ""
-            is_abbreviation = next_first_word.upper() in special_abbrs
-
-            if next_line.startswith("Том "):
-                text_lines[i] = current + ','
-            elif next_first_word and next_first_word[0].isupper() and not is_abbreviation:
-                text_lines[i] = current + '.'
-
-        return " ".join(title_lines), "\n".join(text_lines)
+            # Обработка оставшегося текста
+            text_lines = [line.strip() for line in text_lines if line.strip()]
+            
+            return " ".join(title_lines), " ".join(text_lines)
 
 
     def extract_kt_data(self, first_page: str, last_page: str, pdf_path: str) -> dict:
@@ -255,9 +234,7 @@ class PDFDataExtractor:
         ks_list = []
         # sp_list = []
 
-        fixed_item = "Электронная версия {documentation_type_second} документации по проекту «Дооснащение подсистем безопасности кошек в обычной жизни ООО «Мяу мышь» на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э-{number_field} от {numbering_date}, экз. № {num_copies} только в адрес. "
-        ks_list.append(fixed_item)
-        
+         
         fixed_item_added = False 
         for doc in self.all_documents:
             if not fixed_item_added:
@@ -313,6 +290,12 @@ class DocxTemplateProcessor:
         parts = [p.strip() for p in fio.split() if p.strip()]
         if not parts:
             return ""
+        
+        for i in range(1, len(parts)):
+            parsed = morph.parse(parts[i])[0]
+            nominative = parsed.inflect({'nomn'})  # именительный падеж
+            if nominative:
+                parts[i] = nominative.word.capitalize()
 
         # Получаем часть ключа до "_из_формы" и убираем фигурные скобки
         format_part = format_key.split('_')[0].split('.')[-1].replace('{', '').replace('}', '')
