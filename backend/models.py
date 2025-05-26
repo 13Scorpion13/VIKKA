@@ -20,11 +20,9 @@ letter_history = Table(
     metadata,
     Column("id", Integer, primary_key=True), #
     Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE")), #
-    Column("signer_id", Integer, ForeignKey("signers.id")),
     Column("template_id", Integer, ForeignKey("templates.id")), #
     Column("file_path", String(255)),
-    Column("date", DateTime, default=datetime.utcnow), #
-    Column("adressee_id", Integer, ForeignKey("adressee.id"))
+    Column("date", DateTime, default=datetime.utcnow) #
 )
 
 adressee = Table(
@@ -69,8 +67,7 @@ employee = Table(
     Column("id", Integer, primary_key=True),
     Column("full_name", String(100)),
     Column("position", String(100)),
-    Column("notebook_id", Integer, ForeignKey("nootebooks.id")),
-    Column("organization_id", Integer, ForeignKey("organization.id"))
+    Column("notebook_id", Integer, ForeignKey("nootebooks.id"))
 )
 
 notebook = Table(

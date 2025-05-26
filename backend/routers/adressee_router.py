@@ -5,14 +5,15 @@ from sqlalchemy import insert, select, update, delete
 from database import get_async_session
 from models import adressee
 from schemas import AdresseeCreate, AdresseeUpdate, AdresseeRead
+from db_utils import get_adressee_by_id
 
 router = APIRouter(prefix="/adressee", tags=["Adressee"])
 
 
-async def get_adressee_by_id(session: AsyncSession, adressee_id: int):
-    query = select(adressee).where(adressee.c.id == adressee_id)
-    result = await session.execute(query)
-    return result.mappings().one_or_none()
+# async def get_adressee_by_id(session: AsyncSession, adressee_id: int):
+#     query = select(adressee).where(adressee.c.id == adressee_id)
+#     result = await session.execute(query)
+#     return result.mappings().one_or_none()
 
 @router.post("/", response_model=AdresseeRead)
 async def create_adressee(

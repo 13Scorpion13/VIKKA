@@ -125,28 +125,22 @@ class FaximiliRead(BaseModel):
 # === LetterHistory ===
 class LetterHistoryCreate(BaseModel):
     user_id: int
-    signer_id: int
     template_id: int
     file_path: str
-    adressee_id: int
 
 
 class LetterHistoryUpdate(BaseModel):
     user_id: Optional[int] = None
-    signer_id: Optional[int] = None
     template_id: Optional[int] = None
     file_path: Optional[str] = None
-    adressee_id: Optional[int] = None
 
 
 class LetterHistoryRead(BaseModel):
     id: int
     user_id: int
-    signer_id: int
     template_id: int
     file_path: str
     date: datetime
-    adressee_id: int
 
     class Config:
         from_attributes = True
@@ -217,22 +211,19 @@ class EmployeeCreate(BaseModel):
     full_name: str
     position: str
     notebook_id: int
-    organization_id: int
 
 
 class EmployeeUpdate(BaseModel):
     full_name: Optional[str] = None
     position: Optional[str] = None
     notebook_id: Optional[int] = None
-    organization_id: Optional[int] = None
 
 
 class EmployeeRead(BaseModel):
     id: int
     full_name: str
     position: str
-    notebook_id: int
-    organization_id: int
+    notebook: str
 
     class Config:
         from_attributes = True

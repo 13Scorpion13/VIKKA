@@ -18,6 +18,14 @@ const HomePage = () => {
   const [allTemplates, setAllTemplates] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+
+  const [adressees, setAdressees] = useState([]);
+  const [signers, setSigners] = useState([]);
+  const [isLoadingAdressees, setIsLoadingAdressees] = useState(false);
+  const [isLoadingSigners, setIsLoadingSigners] = useState(false);
+
   const navigate = useNavigate();
 
   const [showModal, setShowModal] = useState(false);
@@ -25,8 +33,12 @@ const HomePage = () => {
     contractNumber: "",
     contractDate: "",
     fileLink: "",
-    recipient: "",
-    signer: ""
+    // recipient: "",
+    // signer: "",
+    organisation: "",
+    contract: "",
+    adresseeId:"",
+    signerId: ""
   });
 
   const location = useLocation();
@@ -42,23 +54,24 @@ const HomePage = () => {
         //const response = await fetch('http://localhost:8000/api/templates/all');
         const [allResponse, recentResponse] = await Promise.all([
           fetch('http://localhost:8000/api/templates/all'),
-          fetch('http://localhost:8000/api/templates/recent')
+          fetch(`http://localhost:8000/api/templates/recent/${user?.id}`)
+          //fetch('http://localhost:8000/api/templates/recent')
         ])
         //const data = await response.json();
         const [allData, recentData] = await Promise.all([
           allResponse.json(),
           recentResponse.json()
         ]);
-        const savedRecent = JSON.parse(localStorage.getItem('recentTemplates')) || [];
+        /* const savedRecent = JSON.parse(localStorage.getItem('recentTemplates')) || [];
         const validRecent = savedRecent.filter(recentTemplate => 
           allData.some(t => t.id === recentTemplate.id)
-        );
+        ); */
 
         setAllTemplates(allData);
         
         //const savedRecent = JSON.parse(localStorage.getItem('recentTemplates')) || [];
-        setRecentTemplates(validRecent);
-        localStorage.setItem('recentTemplates', JSON.stringify(validRecent));
+        setRecentTemplates(recentData);
+        localStorage.setItem('recentTemplates', JSON.stringify(recentData));
       } catch (error) {
         console.error('Error fetching templates:', error);
       } finally {
@@ -68,6 +81,37 @@ const HomePage = () => {
 
     fetchTemplates();
   }, []);
+
+  useEffect(() => {
+  const fetchAdressees = async () => {
+    try {
+      setIsLoadingAdressees(true);
+      const response = await fetch('http://localhost:8000/adressee');
+      const data = await response.json();
+      setAdressees(data);
+    } catch (error) {
+      console.error('Error fetching adressees:', error);
+    } finally {
+      setIsLoadingAdressees(false);
+    }
+  };
+
+  const fetchSigners = async () => {
+    try {
+      setIsLoadingSigners(true);
+      const response = await fetch('http://localhost:8000/signer');
+      const data = await response.json();
+      setSigners(data);
+    } catch (error) {
+      console.error('Error fetching signers:', error);
+    } finally {
+      setIsLoadingSigners(false);
+    }
+  };
+
+  fetchAdressees();
+  fetchSigners();
+}, []);
 
   const handleTemplateClick = (template) => {
     setSelectedTemplate(template);
@@ -89,15 +133,158 @@ const HomePage = () => {
       contractDate: "",
       fileLink: "",
       recipient: "",
-      signer: ""
+      signer: "",
+      organisation: "",
+      contract: ""
     });
   };
 
+  const uploadFilesToServer = async (files, userId) => {
+    if (!files || files.length === 0) return { status: 'no_files' };
+
+    try {
+      const formData = new FormData();
+      files.forEach(file => formData.append('files', file));
+      formData.append('user_id', userId.toString());
+
+      const response = await fetch('http://localhost:8000/api/upload-files/', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Ошибка загрузки файлов');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error; // Пробрасываем ошибку для обработки в вызывающем коде
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    
+    try {
+      const result = await uploadFilesToServer(files, user.id);
+      if (result.status === 'no_files') return;
+      
+      setUploadedFiles(files);
+      setFormData(prev => ({
+        ...prev,
+        fileLink: result.files.join(', ')
+      }));
+      
+    } catch (error) {
+      alert('Ошибка при загрузке файлов: ' + error.message);
+    }
+  };
+
+async function chooseFolder() {
+  try {
+    const dirHandle = await window.showDirectoryPicker();
+    const files = [];
+
+    async function walkDir(handle, path = []) {
+      for await (const entry of handle.values()) {
+        if (entry.kind === 'file') {
+          try {
+            const file = await entry.getFile();
+            file.fullPath = [...path, file.name].join('/');
+            files.push(file);
+          } catch (fileError) {
+            console.warn("Не удалось получить файл:", entry.name, fileError);
+          }
+        } else if (entry.kind === 'directory') {
+          try {
+            await walkDir(entry, [...path, entry.name]); // передаем путь
+          } catch (dirError) {
+            console.warn("Ошибка при обработке подпапки:", entry.name, dirError);
+          }
+        }
+      }
+    }
+    
+    await walkDir(dirHandle); // начинаем обход с корневой папки
+    
+    console.log("Все найденные файлы:", files);
+    
+    // Отправка на сервер
+    setUploadedFiles(files);
+    const result = await uploadFilesToServer(files, user.id);
+    setUploadedFiles(files);
+    setFormData(prev => ({
+      ...prev,
+      fileLink: result.files.join(', ')
+    }));
+
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      console.log("Выбор папки отменён пользователем");
+    } else {
+      console.error("Ошибка выбора папки:", err);
+    }
+  }
+}
+
+  /* const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    try {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+      formData.append('user_id', user.id.toString());
+
+      const response = await fetch('http://localhost:8000/api/upload-files/', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Ошибка загрузки файлов');
+      }
+
+      const result = await response.json();
+      setUploadedFiles(files);
+      setFormData(prev => ({
+        ...prev,
+        fileLink: result.files.join(', ')
+      }));
+
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Ошибка при загрузке файлов: ' + error.message);
+    }
+  }; */
+
   const handleConfirm = async () => {
     try {
-      if (!formData.recipient || !formData.signer) {
-        throw new Error('Заполните обязательные поля: Адресат и Подписант');
+      /* if (uploadedFiles.length > 0) {
+        const formData = new FormData();
+        uploadedFiles.forEach(file => {
+          formData.append('files', file);
+        });
+
+        const uploadResponse = await fetch('http://localhost:8000/api/upload-files/', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!uploadResponse.ok) throw new Error('Ошибка загрузки файлов');
+      } */
+      
+      // Загрузка файлов (если есть)
+      if (uploadedFiles.length > 0) {
+        await uploadFilesToServer(uploadedFiles, user.id);
       }
+      /* if (!formData.recipient || !formData.signer) {
+        throw new Error('Заполните обязательные поля: Адресат и Подписант');
+      } */
 
       if (selectedTemplate.form_type === 'full' && 
         (!formData.contractNumber || !formData.contractDate || !formData.fileLink)) {
@@ -115,7 +302,34 @@ const HomePage = () => {
       setRecentTemplates(updatedRecent);
       localStorage.setItem('recentTemplates', JSON.stringify(updatedRecent));
 
+      const basePayload = {
+        docx_path: selectedTemplate.document_path,
+        /* recipient: formData.recipient,
+        signer: formData.signer, */
+        template_id: selectedTemplate.id,
+        adressee_id: Number(formData.adresseeId),
+        signer_id: Number(formData.signerId),
+        user_id: user?.id
+      };
+
+      console.log(basePayload)
+
       const payload = selectedTemplate.form_type === 'full' 
+        ? { 
+            ...basePayload,
+            contract_number: formData.contractNumber,
+            contract_date: formData.contractDate,
+            //pdf_folder_path: formData.fileLink
+          }
+        : selectedTemplate.form_type === 'minimal'
+          ? {
+              ...basePayload,
+              organisation: formData.organisation,
+              contract: formData.contract
+            }
+          : basePayload;
+
+      /* const payload = selectedTemplate.form_type === 'full' 
         ? { 
             docx_path: selectedTemplate.document_path,
             recipient: formData.recipient,
@@ -130,7 +344,7 @@ const HomePage = () => {
             recipient: formData.recipient,
             signer: formData.signer,
             template_id: selectedTemplate.id
-          };
+          }; */
 
       const response = await fetch('http://localhost:8000/api/process-document/', {
         method: 'POST',
@@ -145,8 +359,8 @@ const HomePage = () => {
         fullDocxPath: result.full_docx_path,
         templateTitle: selectedTemplate.title,
         userInfo: user,
-        signer: formData.signer,
-        recipient: formData.recipient,
+        signer: result["signer"],
+        recipient: result["recipient"],
         templateID: selectedTemplate.id
       }});
     } catch (error) {
@@ -381,7 +595,7 @@ const HomePage = () => {
               {selectedTemplate?.form_type === 'full' ? (
                 <>
                   <div className="form-group">
-                    <label>Номер и дата договора</label>
+                    <label>Номер и дата договора(опционально)</label>
                     <input
                       type="text"
                       name="contractNumber"
@@ -398,7 +612,7 @@ const HomePage = () => {
                     />
                   </div>
                   
-                  <div className="form-group">
+                  {/*<div className="form-group">
                     <label>Ссылка на файлы с приложениями</label>
                     <input
                       type="text"
@@ -407,12 +621,156 @@ const HomePage = () => {
                       onChange={handleFormChange}
                       placeholder="Укажите путь к файлу"
                     />
+                  </div>*/}
+
+                  <div className="form-group">
+                    <label>Прикрепленные файлы</label>
+                    <button onClick={chooseFolder} className="form-control">
+                      Выбрать папку
+                    </button>
+                    {uploadedFiles.length > 0 && (
+                      <div className="mt-2">
+                        <small>Выбрано файлов: {uploadedFiles.length}</small>
+                      </div>
+                    )}
+                    
+                  </div>
+                </>
+              ) : null}
+
+              {selectedTemplate?.form_type === 'minimal' ? (
+                <>
+                  <div className="form-group">
+                    <label>Организации</label>
+                    <input
+                      type="text"
+                      name="organisation"
+                      value={formData.organisation}
+                      onChange={handleFormChange}
+                      placeholder="Организация"
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>Объект договора</label>
+                    <input
+                      type="text"
+                      name="contract"
+                      value={formData.contract}
+                      onChange={handleFormChange}
+                      placeholder="Объект договора"
+                    />
                   </div>
                 </>
               ) : null}
 
               {/* Общие поля для всех форм */}
+              {/* <div className="form-group">
+                <label>Адресат</label>
+                {isLoadingAdressees ? (
+                  <div className="spinner-border spinner-border-sm" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                ) : (
+                  <select
+                    name="recipient"
+                    value={formData.recipient}
+                    onChange={handleFormChange}
+                    className="form-select"
+                  >
+                    <option value="">Выберите адресата</option>
+                    {adressees.map(adressee => (
+                      <option key={adressee.id} value={adressee.full_name}>
+                        {adressee.full_name} ({adressee.position}, {adressee.organization})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div> */}
               <div className="form-group">
+                <label>Адресат</label>
+                {isLoadingAdressees ? (
+                  <div className="spinner-border spinner-border-sm" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                ) : (
+                  <select
+                    name="adresseeId"
+                    value={formData.adresseeId}
+                    onChange={(e) => {
+                      const selected = adressees.find(a => a.id == e.target.value);
+                      setFormData(prev => ({
+                        ...prev,
+                        adresseeId: e.target.value,
+                        recipient:selected?.full_name || ""
+                      }));
+                    }}
+                    className="form-select"
+                  >
+                    <option value="">Выберите адресата</option>
+                    {adressees.map(adressee => (
+                      <option key={adressee.id} value={adressee.id}>
+                        {adressee.full_name} ({adressee.position}, {adressee.organization})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* <div className="form-group">
+                <label>Подписант</label>
+                {isLoadingSigners ? (
+                  <div className="spinner-border spinner-border-sm" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                ) : (
+                  <select
+                    name="signer"
+                    value={formData.signer}
+                    onChange={handleFormChange}
+                    className="form-select"
+                  >
+                    <option value="">Выберите подписанта</option>
+                    {signers.map(signer => (
+                      <option key={signer.id} value={signer.full_name}>
+                        {signer.full_name} ({signer.position})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div> */}
+              <div className="form-group">
+                <label>Подписант</label>
+                {isLoadingSigners ? (
+                  <div className="spinner-border spinner-border-sm" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                ) : (
+                  <select
+                    name="signerId"
+                    value={formData.signerId}
+                    onChange={(e) => {
+                      const selected = signers.find(a => a.id == e.target.value);
+                      setFormData(prev => ({
+                        ...prev,
+                        signerId: e.target.value,
+                        signer:selected?.full_name || ""
+                      }));
+                    }}
+                    className="form-select"
+                  >
+                    <option value="">Выберите подписанта</option>
+                    {signers.map(signer => (
+                      <option key={signer.id} value={signer.id}>
+                        {signer.full_name} ({signer.position})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Общие поля для всех форм */}
+              {/* <div className="form-group">
                 <label>Адресат</label>
                 <input
                   type="text"
@@ -421,9 +779,9 @@ const HomePage = () => {
                   onChange={handleFormChange}
                   placeholder="ФИО или название организации"
                 />
-              </div>
+              </div> */}
               
-              <div className="form-group">
+              {/* <div className="form-group">
                 <label>Подписант</label>
                 <input
                   type="text"
@@ -432,7 +790,7 @@ const HomePage = () => {
                   onChange={handleFormChange}
                   placeholder="ФИО подписанта"
                 />
-              </div>
+              </div> */}
             </div>
             
             <div className="modal-buttons">

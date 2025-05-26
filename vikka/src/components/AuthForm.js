@@ -32,7 +32,7 @@ const AuthForm = () => {
       const result = await response.json();
       if (response.ok) {
         // const result = await response.json();
-        alert("Успешная авторизация!");
+        //alert("Успешная авторизация!");
         navigate("/home", { state: {
           userInfo: result.user
         }});

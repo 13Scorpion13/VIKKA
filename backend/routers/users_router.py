@@ -2,7 +2,7 @@ import bcrypt
 from fastapi import Depends, HTTPException, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, update, delete
-
+import os
 from database import get_async_session
 from models import user
 from schemas import UserCreate, UserUpdate, UserRead, LoginRequest
@@ -83,6 +83,15 @@ async def register_user(
         await session.commit()
         
         new_user = await get_user_by_id(session, new_user_id)
+        try:
+            os.makedirs(f"static/converted_files/{new_user_id}", exist_ok=False)
+            os.makedirs(f"static/uploads/{new_user_id}", exist_ok=False)
+        except FileExistsError:
+            raise HTTPException(status_code=400, detail=f"Папка уже существует")
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Нет прав на создание папки")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка: {str(e)}")
         return new_user
 
     except Exception as e:

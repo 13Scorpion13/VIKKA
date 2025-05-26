@@ -3,15 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, update, delete
 
 from database import get_async_session
-from models import employee
+from models import employee, notebook
 from schemas import EmployeeCreate, EmployeeUpdate, EmployeeRead
+from db_utils import get_employee_by_id
 
 router = APIRouter(prefix="/employee", tags=["Employee"])
 
-async def get_employee_by_id(session: AsyncSession, emp_id: int):
+""" async def get_employee_by_id(session: AsyncSession, emp_id: int):
     query = select(employee).where(employee.c.id == emp_id)
     result = await session.execute(query)
-    return result.mappings().one_or_none()
+    return result.mappings().one_or_none() """
 
 
 @router.post("/", response_model=EmployeeRead)
@@ -40,13 +41,38 @@ async def read_employee(
     return db_item
 
 
+async def get_all_employees_with_notebook(session):
+    query = (
+        select(
+            employee.c.id,
+            employee.c.full_name,
+            employee.c.position,
+            notebook.c.notebooks_name,
+            notebook.c.serial_number
+        )
+        .select_from(employee.join(notebook))
+    )
+    result = await session.execute(query)
+    return result.mappings().all()
+
 @router.get("/", response_model=list[EmployeeRead])
 async def read_all_employees(
     session: AsyncSession = Depends(get_async_session)
 ):
-    query = select(employee)
-    result = await session.execute(query)
-    return result.mappings().all()
+    db_items = await get_all_employees_with_notebook(session)
+
+    if not db_items:
+        raise HTTPException(status_code=404, detail="Сотрудники не найдены")
+
+    return [
+        {
+            "id": item.id,
+            "full_name": item.full_name,
+            "position": item.position,
+            "notebook": f"{item.notebooks_name}, \n{item.serial_number}"
+        }
+        for item in db_items
+    ]
 
 
 @router.put("/{emp_id}", response_model=EmployeeRead)

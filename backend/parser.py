@@ -33,16 +33,20 @@ class PDFDataExtractor:
                 'фио': '',
                 'должность': ''
             },
-            'экземпляры': 1 
+            'экземпляры': 1,
+            'организация' : '',
+            'объектдоговора':'' 
         }
 
-    def set_frontend_data(self, contract_number: str, contract_date: str, addressee: dict, signer: dict, copies: int = 1):
+    def set_frontend_data(self, contract_number: str, contract_date: str, addressee: dict, signer: dict, organisation: str, contract: str, copies: int = 1):
         """Устанавливает данные из фронтенда"""
         self.frontend_data['договор']['номер'] = contract_number
         self.frontend_data['договор']['дата'] = contract_date
         self.frontend_data['адресат'] = addressee
         self.frontend_data['подписант'] = signer
         self.frontend_data['экземпляры'] = copies  
+        self.frontend_data['организация'] = organisation
+        self.frontend_data['объектдоговора'] = contract
 
     def extract_text_from_pdf(self, pdf_path: str) -> tuple:
         with fitz.open(pdf_path) as doc:
@@ -81,7 +85,6 @@ class PDFDataExtractor:
 
     def extract_title_and_text(self, pdf_path: str) -> tuple:
         def capitalize_russian_city(text: str) -> str:
-            """Заменяет корень города на правильный регистр (например: сургутского -> Сургутского)."""
             for city in RUSSIAN_CITIES:
                 pattern = re.compile(city, flags=re.IGNORECASE)
                 matches = list(pattern.finditer(text))
@@ -91,20 +94,40 @@ class PDFDataExtractor:
                     text = text[:start] + city.title() + text[end:]
             return text
 
-        def process_quoted_text(text: str) -> str:
-            """Обрабатывает текст в кавычках, делая каждое слово с заглавной буквы"""
+        def process_quoted_text(text: str, is_after_ooo: bool) -> str:
             if '«' in text and '»' in text:
                 start = text.find('«') + 1
                 end = text.find('»')
                 quoted = text[start:end]
-                # Разбиваем на слова и делаем каждое слово с заглавной буквы
-                processed = ' '.join([word.capitalize() for word in quoted.split()])
+
+                # Разбиваем на слова, сохраняя дефисы
+                parts = re.split(r'(-)', quoted)  # Делит по дефису, оставляя его в списке
+
+                # Обрабатываем только слова, не трогаем дефисы
+                processed_parts = []
+                word_index = 0  # индекс только для слов, не для дефисов
+
+                for part in parts:
+                    if part == '-':
+                        processed_parts.append(part)
+                        continue
+
+                    if is_after_ooo:
+                        if word_index in [0, 2]:
+                            processed_parts.append(part.capitalize())
+                        else:
+                            processed_parts.append(part.lower())
+                    else:
+                        processed_parts.append(part.capitalize())
+
+                    word_index += 1
+
+                processed = ''.join(processed_parts)
                 return text[:start] + processed + text[end:]
             return text
-
         with pdfplumber.open(pdf_path) as pdf:
-            page = pdf.pages[0]  
-            lines = page.extract_text().split("\n")[:-1] 
+            page = pdf.pages[0]
+            lines = page.extract_text().split("\n")[:-1]
             lines = [
                 line for line in lines
                 if len(re.sub(r'[^А-Яа-яA-Za-z]', '', line)) > 2
@@ -113,39 +136,40 @@ class PDFDataExtractor:
             lines = [line.replace(".в ", "") for line in lines]
             special_abbrs = {"АСУ", "ТП", "ТР", "ГКС", "СЗСК", "КИИ", "ЗСК", "ЛПУМГ"}
             highlighted_lines = []
-            is_title = False
-            idx_ooo = 0
-
+            
+            found_title = False
+            idx_ooo = -1
+            k = 0
             for i, line in enumerate(lines):
-                idx_ooo -= 1
-                if line.isupper():
-                    is_title = True
+                if not found_title:                
+                    if line.isupper():                       
+                        found_title = True
+                    else:
+                        k = k + 1
+                        continue
                 
-                # Обрабатываем строки с ООО
+                if line.isupper():
+                        is_title = True
+
+                if '«' in line and '»' in line:
+                    line = process_quoted_text(line, is_after_ooo=False)
+
                 if "ООО" in line:
-                    idx_ooo += i
-                    
-                    # Обрабатываем предыдущую строку, если она содержит кавычки
-                    if i > 0 and ('«' in lines[i-1] or '»' in lines[i-1]):
-                        lines[i-1] = process_quoted_text(lines[i-1])
-                    
-                    # Разделяем строку на части до и после ООО
+                    idx_ooo = len(highlighted_lines)
+
                     parts = line.split("ООО", 1)
                     if len(parts) == 2:
                         before_ooo = parts[0].strip()
                         after_ooo = parts[1].strip()
-                        
-                        # Обрабатываем текст в кавычках после ООО
-                        after_ooo = process_quoted_text(after_ooo)
-                        
+
+                        after_ooo = process_quoted_text(after_ooo, is_after_ooo=True)
                         text = before_ooo + ' ООО ' + after_ooo
                     else:
                         text = line
-                    
+
                     highlighted_lines.append(text)
                     continue
 
-                # Остальная обработка строк...
                 if line.isupper() and sum(char.isdigit() for char in line) >= 3:
                     highlighted_lines.append(line)
                     continue
@@ -155,17 +179,18 @@ class PDFDataExtractor:
                 if not line.isupper() and is_title:
                     highlighted_lines.append(line)
 
-            # Обработка первой строки и строки с ООО
             if highlighted_lines:
                 highlighted_lines[0] = highlighted_lines[0].capitalize()
             if idx_ooo + 1 < len(highlighted_lines):
                 highlighted_lines[idx_ooo + 1] = highlighted_lines[idx_ooo + 1].capitalize()
-
-            # Разделение на заголовок и текст
+            
+            for j, line in enumerate(highlighted_lines):
+                if "ООО" in line:
+                    idx_ooo = j
+            
             title_lines = highlighted_lines[:idx_ooo + 1]
             text_lines = highlighted_lines[idx_ooo + 1:]
 
-            # Дополнительная обработка аббревиатур и городов
             for i in range(len(title_lines)):
                 line = title_lines[i]
                 for abbr in special_abbrs:
@@ -174,10 +199,41 @@ class PDFDataExtractor:
                 line = capitalize_russian_city(line)
                 title_lines[i] = line
 
-            # Обработка оставшегося текста
             text_lines = [line.strip() for line in text_lines if line.strip()]
-            
+
+            for i in range(len(text_lines)):
+                line = text_lines[i].strip()
+
+                if len(line) < 3:
+                    text_lines[i] = ''
+                    continue
+
+                for abbr in special_abbrs:
+                    pattern = re.compile(rf'\b{abbr.lower()}\b', re.IGNORECASE)
+                    line = pattern.sub(abbr, line)
+
+                line = capitalize_russian_city(line)
+                text_lines[i] = line
+
+            for i in range(len(text_lines) - 1):
+                current = text_lines[i].rstrip()
+                next_line = text_lines[i + 1].lstrip()
+
+                if not current or current.endswith('.'):
+                    continue
+
+                next_first_word = next_line.split()[0] if next_line else ""
+                is_abbreviation = next_first_word.upper() in special_abbrs
+
+                if next_line.startswith("Том "):
+                    text_lines[i] = current + ','
+                elif next_first_word and next_first_word[0].isupper() and not is_abbreviation:
+                    text_lines[i] = current + '.'
+
             return " ".join(title_lines), " ".join(text_lines)
+
+            
+            """ return " ".join(title_lines), " ".join(text_lines) """
 
 
     def extract_kt_data(self, first_page: str, last_page: str, pdf_path: str) -> dict:
@@ -238,7 +294,7 @@ class PDFDataExtractor:
         fixed_item_added = False 
         for doc in self.all_documents:
             if not fixed_item_added:
-                fixed_item = f"Электронная версия {{documentation_type_second}} документации по проекту «{doc['названиедокумента']} на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э 459 от 26.03.2025(календарь), экз. № 1/1(человек должен задать отдельно для дисков и бумажной документации) только в адрес. "
+                fixed_item = f"Электронная версия {{documentation_type_second}} документации по проекту «{doc['названиедокумента']} на электронном носителе CD-R, коммерческая тайна, уч. № КТ/Э-{{number_field}} от {{numbering_date}}, экз. № {{num_copies}} только в адрес. "
                 ks_list.append(fixed_item)
                 fixed_item_added = True
 
@@ -329,99 +385,216 @@ class DocxTemplateProcessor:
                 return parts[0]
             case _:
                 return " ".join(parts)  # По умолчанию — полное ФИО
-        
+            
     def process_template(self, template_path: str, output_path: str):
-        """Обрабатывает шаблон с выравниванием по ширине и заданными отступами"""
+        """Обрабатывает шаблон с ручной нумерацией, выравниванием по ширине и табуляцией, адаптированной под двухзначные номера"""
         doc = Document(template_path)
         
         # Параметры в twips (1 см = 567 twips)
-        LEFT_INDENT = int(0.25 * 567)    # 0.25 см
-        FIRST_LINE_INDENT = int(1.0 * 567)  # 1.0 см
-        TAB_STOP_1 = int(1.75 * 567)      # 1.75 см (первая позиция табуляции)
-        LINE_SPACING = 360                # 1.5 строки
-        
-        # Ищем параграф с меткой {списокдокументов:}
+        BASE_LEFT_INDENT = int(0.25 * 567)       # 0.25 см
+        BASE_FIRST_LINE_INDENT = int(1.0 * 567)  # 1.0 см
+        BASE_TAB_STOP = int(1.75 * 567)          # 1.75 см
+        WIDE_TAB_STOP = int(2.0 * 567)           # 2.0 см
+        LINE_SPACING = 360                       # 1.5 строки
+
         for paragraph in doc.paragraphs:
             if '{списокдокументов:}' in paragraph.text:
                 parent = paragraph._p.getparent()
                 index = parent.index(paragraph._p)
                 parent.remove(paragraph._p)
-                
-                for item in self.data_sources['списокдокументов']:
+
+                for i, item in enumerate(self.data_sources['списокдокументов'], start=1):
                     new_paragraph = OxmlElement('w:p')
-                    
-                    # Настройки нумерации
-                    num_pr = OxmlElement('w:numPr')
-                    ilvl = OxmlElement('w:ilvl')
-                    ilvl.set(qn('w:val'), '0')
-                    num_id = OxmlElement('w:numId')
-                    num_id.set(qn('w:val'), '1')
-                    num_pr.append(ilvl)
-                    num_pr.append(num_id)
-                    
+
                     # Настройки абзаца
                     p_pr = OxmlElement('w:pPr')
-                    p_pr.append(num_pr)
-                    
+
                     # Выравнивание по ширине
                     jc = OxmlElement('w:jc')
                     jc.set(qn('w:val'), 'both')
                     p_pr.append(jc)
-                    
-                    # Отступы (левый 0.25 см, первая строка 1 см)
+
+                    # Отступы
                     ind = OxmlElement('w:ind')
-                    ind.set(qn('w:left'), str(LEFT_INDENT))
-                    ind.set(qn('w:firstLine'), str(FIRST_LINE_INDENT))
+                    ind.set(qn('w:left'), str(BASE_LEFT_INDENT))
+                    ind.set(qn('w:firstLine'), str(BASE_FIRST_LINE_INDENT))
                     p_pr.append(ind)
-                    
-                    # Позиции табуляции (1.75 см)
+
+                    # Позиции табуляции
                     tabs = OxmlElement('w:tabs')
                     tab = OxmlElement('w:tab')
                     tab.set(qn('w:val'), 'left')
-                    tab.set(qn('w:pos'), str(TAB_STOP_1))
+
+                    # При номерах больше 9 — немного сдвигаем табуляцию
+                    if i >= 10:
+                        tab.set(qn('w:pos'), str(WIDE_TAB_STOP))
+                    else:
+                        tab.set(qn('w:pos'), str(BASE_TAB_STOP))
+
                     tabs.append(tab)
                     p_pr.append(tabs)
-                    
-                    # Настройки интервала
+
+                    # Интервалы
                     spacing = OxmlElement('w:spacing')
                     spacing.set(qn('w:before'), '0')
                     spacing.set(qn('w:after'), '0')
                     spacing.set(qn('w:line'), str(LINE_SPACING))
                     spacing.set(qn('w:lineRule'), 'auto')
                     p_pr.append(spacing)
-                    
+
                     new_paragraph.append(p_pr)
-                    
-                    # Добавляем текст
+
+                    # Создаём run с номером, табуляцией и текстом
                     run = OxmlElement('w:r')
-                    text = OxmlElement('w:t')
-                    text.text = item
-                    run.append(text)
+
+                    # Параметры run
+                    r_pr = OxmlElement('w:rPr')
+                    sz = OxmlElement('w:sz')
+                    sz.set(qn('w:val'), '24')  # 12 pt
+                    r_pr.append(sz)
+
+                    r_fonts = OxmlElement('w:rFonts')
+                    r_fonts.set(qn('w:ascii'), 'Times New Roman')
+                    r_fonts.set(qn('w:hAnsi'), 'Times New Roman')
+                    r_pr.append(r_fonts)
+
+                    run.append(r_pr)
+
+                    # 1. Номер
+                    t_num = OxmlElement('w:t')
+                    t_num.text = f"{i}."
+                    run.append(t_num)
+
+                    # 2. Табуляция
+                    tab_el = OxmlElement('w:tab')
+                    run.append(tab_el)
+
+                    # 3. Текст
+                    t_text = OxmlElement('w:t')
+                    t_text.text = item
+                    run.append(t_text)
+
                     new_paragraph.append(run)
-                    
                     parent.insert(index, new_paragraph)
                     index += 1
-                    
+
                 break
-        
+
         # Остальная обработка документа
         self._process_headers_footers(doc)
 
         for paragraph in doc.paragraphs:
             self._replace_in_paragraph(paragraph)
-            
+
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
                         self._replace_in_paragraph(paragraph)
+                        
 
         for shape in doc.inline_shapes:
             if hasattr(shape, 'text_frame'):
                 for paragraph in shape.text_frame.paragraphs:
                     self._replace_in_paragraph(paragraph)
 
-        doc.save(output_path)  
+        doc.save(output_path)
+
+
+        
+    # def process_template(self, template_path: str, output_path: str):
+    #     """Обрабатывает шаблон с выравниванием по ширине и заданными отступами"""
+    #     doc = Document(template_path)
+        
+    #     # Параметры в twips (1 см = 567 twips)
+    #     LEFT_INDENT = int(0.25 * 567)    # 0.25 см
+    #     FIRST_LINE_INDENT = int(1.0 * 567)  # 1.0 см
+    #     TAB_STOP_1 = int(1.75 * 567)      # 1.75 см (первая позиция табуляции)
+    #     LINE_SPACING = 360                # 1.5 строки
+        
+    #     # Ищем параграф с меткой {списокдокументов:}
+    #     for paragraph in doc.paragraphs:
+    #         if '{списокдокументов:}' in paragraph.text:
+    #             parent = paragraph._p.getparent()
+    #             index = parent.index(paragraph._p)
+    #             parent.remove(paragraph._p)
+                
+    #             for item in self.data_sources['списокдокументов']:
+    #                 new_paragraph = OxmlElement('w:p')
+                    
+    #                 # Настройки нумерации
+    #                 num_pr = OxmlElement('w:numPr')
+    #                 ilvl = OxmlElement('w:ilvl')
+    #                 ilvl.set(qn('w:val'), '0')
+    #                 num_id = OxmlElement('w:numId')
+    #                 num_id.set(qn('w:val'), '24')
+    #                 num_pr.append(ilvl)
+    #                 num_pr.append(num_id)
+                    
+    #                 # Настройки абзаца
+    #                 p_pr = OxmlElement('w:pPr')
+    #                 p_pr.append(num_pr)
+                    
+    #                 # Выравнивание по ширине
+    #                 jc = OxmlElement('w:jc')
+    #                 jc.set(qn('w:val'), 'both')
+    #                 p_pr.append(jc)
+                    
+    #                 # Отступы (левый 0.25 см, первая строка 1 см)
+    #                 ind = OxmlElement('w:ind')
+    #                 ind.set(qn('w:left'), str(LEFT_INDENT))
+    #                 ind.set(qn('w:firstLine'), str(FIRST_LINE_INDENT))
+    #                 p_pr.append(ind)
+                    
+    #                 # Позиции табуляции (1.75 см)
+    #                 tabs = OxmlElement('w:tabs')
+    #                 tab = OxmlElement('w:tab')
+    #                 tab.set(qn('w:val'), 'left')
+    #                 tab.set(qn('w:pos'), str(TAB_STOP_1))
+    #                 tabs.append(tab)
+    #                 p_pr.append(tabs)
+                    
+    #                 # Настройки интервала
+    #                 spacing = OxmlElement('w:spacing')
+    #                 spacing.set(qn('w:before'), '0')
+    #                 spacing.set(qn('w:after'), '0')
+    #                 spacing.set(qn('w:line'), str(LINE_SPACING))
+    #                 spacing.set(qn('w:lineRule'), 'auto')
+    #                 p_pr.append(spacing)
+                    
+    #                 new_paragraph.append(p_pr)
+                    
+    #                 # Добавляем текст
+    #                 run = OxmlElement('w:r')
+    #                 text = OxmlElement('w:t')
+    #                 text.text = item
+    #                 run.append(text)
+    #                 new_paragraph.append(run)
+                    
+    #                 parent.insert(index, new_paragraph)
+    #                 index += 1
+                    
+    #             break
+        
+    #     # Остальная обработка документа
+    #     self._process_headers_footers(doc)
+
+    #     for paragraph in doc.paragraphs:
+    #         self._replace_in_paragraph(paragraph)
+            
+    #     for table in doc.tables:
+    #         for row in table.rows:
+    #             for cell in row.cells:
+    #                 for paragraph in cell.paragraphs:
+    #                     self._replace_in_paragraph(paragraph)
+
+    #     for shape in doc.inline_shapes:
+    #         if hasattr(shape, 'text_frame'):
+    #             for paragraph in shape.text_frame.paragraphs:
+    #                 self._replace_in_paragraph(paragraph)
+
+    #     doc.save(output_path)
+
    
         
 
@@ -571,24 +744,41 @@ class DocxTemplateProcessor:
 
 def main(
         docx_path: str,
-        recipient: str,
-        signer: str,
+        adressee_data: dict,
+        signer_data: dict,
+        user_id: int,
+        # recipient: str,
+        # signer: str,
         contract_number: Optional[str] = None,
         contract_date: Optional[str] = None,
-        pdf_folder_path: Optional[str] = None
+        pdf_folder_path: Optional[str] = None,
+        organisation: Optional[str] = None,
+        contract: Optional[str] = None
         ) -> str:
     pdf_extractor = PDFDataExtractor()
     docx_processor = DocxTemplateProcessor()
 
+    # addressee = {
+    #     'фио': recipient,
+    #     'должность': 'Заместителю генерального директора',
+    #     'организация': 'ООО «Мяу Кусь»'
+    # }
     addressee = {
-        'фио': recipient,
-        'должность': 'Заместителю генерального директора',
-        'организация': 'ООО «Мяу Кусь»'
+        'фио': adressee_data['фио'],
+        'должность': adressee_data['должность'],
+        'организация': adressee_data['организация']
     }
+    # signer = {
+    #     'фио': signer,
+    #     'должность': 'Генеральный директор'
+    # }
     signer = {
-        'фио': signer,
-        'должность': 'Генеральный директор'
+        'фио': signer_data['фио'],
+        'должность': signer_data['должность']
     }
+    
+    organisation = organisation
+    contract = contract
     copies = 4
     
     pdf_extractor.set_frontend_data(
@@ -596,6 +786,8 @@ def main(
         contract_date,
         addressee,
         signer,
+        organisation,
+        contract,
         copies
     )
 
@@ -606,11 +798,14 @@ def main(
         },
         'адресат': addressee,
         'подписант': signer,
-        'экземпляры': copies 
+        'экземпляры': copies,
+        'организация': organisation,
+        'объектдоговора': contract
     })
 
     pdf_files = []
-    pdf_folder_path = r"/app/pdfs"
+    #pdf_folder_path = r"/app/pdfs"
+    pdf_folder_path = pdf_folder_path
     if pdf_folder_path:
         if not os.path.exists(pdf_folder_path):
             raise ValueError(f"Путь к PDF не существует: {pdf_folder_path}")
@@ -634,7 +829,7 @@ def main(
     print(template_path)
     
     original_filename = os.path.basename(docx_path)
-    output_path = os.path.join("static/converted_files", original_filename)
+    output_path = os.path.join(f"static/converted_files/{user_id}", original_filename)
     docx_processor.process_template(template_path, output_path)
     print(f"\nДокумент сохранен как {output_path}")
     return output_path

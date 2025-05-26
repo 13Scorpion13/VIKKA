@@ -54,7 +54,7 @@
 
 .form-control:focus {
   outline: none;
-  border-color: #e68900;
+  border-color: #ff9a68;
 }
 
 .password-group {
@@ -77,7 +77,7 @@
 }
 
 .auth-btn {
-  background: #ff833a;
+  background: #ff9a68;
   color: white;
   border: none;
   padding: 10px;
@@ -89,7 +89,7 @@
 }
 
 .auth-btn:hover {
-  background: darkorange;
+  background: #ff9a68;
 }
 
 .small-link {
@@ -140,9 +140,9 @@
   opacity: 0.5;
 }
 
-.circles div { border: 1px solid #ff833a; }
+.circles div { border: 1px solid #ff9a68; }
 .circles-center div { border: 1px solid #4d4d4d; }
-.circles-right div { border: 1px solid #ff833a; }
+.circles-right div { border: 1px solid #ff9a68; }
 
 .circles div:nth-child(1), .circles-right div:nth-child(1) { width: 80%; height: 80%; }
 .circles div:nth-child(2), .circles-right div:nth-child(2) { width: 70%; height: 70%; }

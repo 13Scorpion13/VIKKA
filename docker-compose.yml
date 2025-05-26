@@ -24,7 +24,9 @@ services:
       - "8000:8000"
     volumes:
       - ./static:/app/static
-      - c:/Users/user/Desktop/132/Test:/app/pdfs
+      - ./static/uploads:/app/uploads
+    environment:
+      - UPLOAD_FOLDER=/app/uploads
     networks:
       - vikka_network
   

@@ -5,13 +5,14 @@ from sqlalchemy import insert, select, update, delete
 from database import get_async_session
 from models import signer
 from schemas import SignerCreate, SignerUpdate, SignerRead
+from db_utils import get_signer_by_id
 
 router = APIRouter(prefix="/signer", tags=["Signer"])
 
-async def get_signer_by_id(session: AsyncSession, signer_id: int):
-    query = select(signer).where(signer.c.id == signer_id)
-    result = await session.execute(query)
-    return result.mappings().one_or_none()
+# async def get_signer_by_id(session: AsyncSession, signer_id: int):
+#     query = select(signer).where(signer.c.id == signer_id)
+#     result = await session.execute(query)
+#     return result.mappings().one_or_none()
 
 
 @router.post("/", response_model=SignerRead)

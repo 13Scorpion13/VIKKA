@@ -44,6 +44,24 @@ const EditorPage = () => {
         type: ""
     });
 
+    const updateButtonPosition = () => {
+    const tables = Array.from(docxContainerRef.current?.querySelectorAll('table') || []);
+    if (tables.length > TARGET_TABLE_INDEX) {
+        const table = tables[TARGET_TABLE_INDEX];
+        const rect = table.getBoundingClientRect();
+        const scrollY = window.scrollY || window.pageYOffset;
+
+        setButtonPosition({
+            style: {
+                top: `${rect.bottom + scrollY + 5}px`,
+                left: `${rect.left + rect.width / 2}px`,
+                transform: 'translateX(-50%)'
+            },
+            tableIndex: TARGET_TABLE_INDEX
+        });
+    }
+};
+
     const FIELD_TYPES = {
         data_field: {
             type: "text",
@@ -86,7 +104,7 @@ const EditorPage = () => {
         },
         contract_field: {
             type: "text",
-            placeholder: "№ договора",
+            placeholder: "№ письма",
             style: { 
                 height: "25px",
                 width: "140px",
@@ -96,7 +114,7 @@ const EditorPage = () => {
         },
         number_field: {
             type: "text",
-            placeholder: "Учетный номер",
+            placeholder: "Учетный №",
             style: { 
                 height: "25px",
                 width: "110px",
@@ -132,11 +150,21 @@ const EditorPage = () => {
         },
         engineer_full_name: {
             type: "select",
-            options: engineers,
-            linkedField: "engineer_notebook",
+            options: ["Выберите инженера", ...engineers],
+            linkedField: ["engineer_notebook", "engineer_position"],
             style: {
                 height: "25px",
                 width: "140px"
+            }
+        },
+        engineer_position: {
+            type: "text",
+            readOnly: true,
+            style: {
+                height: "25px",
+                width: "140px",
+                backgroundColor: "#f5f5f5",
+                fontStyle: "italic"
             }
         },
         engineer_notebook: {
@@ -151,8 +179,8 @@ const EditorPage = () => {
             }
         },
         areas_name: {
-            type: "text",
-            options: areas,
+            type: "select",
+            options: ["Выберите площадку", ...areas],
             style: {
                 height: "25px",
                 width: "140px"
@@ -251,19 +279,34 @@ const EditorPage = () => {
     useEffect(() => {
         const loadEngineers = async () => {
             try {
-                const response = await fetch("http://localhost:8000/api/engineers");
+                const response = await fetch("http://localhost:8000/employee/");
                 if (!response.ok) throw new Error("HTTP error");
                 const data = await response.json();
-                setEngineers(data.engineers.map(e => ({ 
+                setEngineers(data.map(e => ({ 
                     value: e.full_name, 
                     label: e.full_name,
-                    notebook: e.notebook 
+                    notebook: e.notebook,
+                    position: e.position
                 })));
             } catch (error) {
                 console.error("Ошибка загрузки инженеров:", error);
             }
         };
         loadEngineers();
+        const loadAreas = async () => {
+            try {
+                const response = await fetch("http://localhost:8000/area/");
+                if (!response.ok) throw new Error("HTTP error");
+                const data = await response.json();
+                setAreas(data.map(e => ({
+                    value: e.areas_name,
+                    label: e.areas_name
+                })));
+            } catch (error) {
+                console.error("Ошибка загрузки зон:", error)
+            }
+        };
+        loadAreas();
     }, []);
 
     const normalizeOptions = (options) => {
@@ -279,6 +322,15 @@ const EditorPage = () => {
         });
     };
 
+    /* const normalizeOptions = (options) => {
+        return options.map(e => ({
+            value: e.value || e.full_name,
+            label: e.label || e.full_name,
+            notebook: e.notebook,
+            position: e.position // Добавляем должность
+        }));
+    }; */
+
     const renderDocument = async (blob, isEditMode) => {       
         await renderAsync(blob, docxContainerRef.current, null, {
             className: "docx",
@@ -292,9 +344,24 @@ const EditorPage = () => {
         if (isEditMode) {
             let html = container.innerHTML;
             fields.forEach(field => {
-                const config = FIELD_TYPES[field] || { type: "text" };
+                const isTableField = field.match(/^(.+)_(\d+)$/);
+                const baseField = isTableField ? isTableField[1] : field;
+                const rowIndex = isTableField ? isTableField[2] : null;
+
+                const config = FIELD_TYPES[baseField] || { type: "text" };
                 const value = fieldValues[field] || "";
-            
+                //${config.linkedFields ? `data-linked="${config.linkedFields.join(',')}"` : ''}
+                //${config.linkedField ? `data-linked="${config.linkedField}_${rowIndex}"` : ''}
+                {/* <option 
+                                    value="${opt.value}" 
+                                    ${Object.entries(opt)
+                                        .filter(([key]) => !['value', 'label'].includes(key))
+                                        .map(([key, val]) => `data-${key}="${val}"`)
+                                        .join(' ')}
+                                    ${value === opt.value ? 'selected' : ''}
+                                >
+                                    ${opt.label}
+                                </option> */}
                 if (config.type === "select") {
                     const normalizedOptions = normalizeOptions(config.options || []);
                     html = html.replace(
@@ -302,16 +369,14 @@ const EditorPage = () => {
                         `<select 
                             class="docx-field docx-select"
                             data-field="${field}"
-                            ${config.linkedField ? `data-linked="${config.linkedField}"` : ''}
+                            ${config.linkedField ? `data-linked="${config.linkedField}_${rowIndex}"` : ''}
                             style="${cssStyleToString(config.style)}"
                         >
                             ${normalizedOptions.map(opt => `
                                 <option 
                                     value="${opt.value}" 
-                                    ${Object.entries(opt)
-                                        .filter(([key]) => !['value', 'label'].includes(key))
-                                        .map(([key, val]) => `data-${key}="${val}"`)
-                                        .join(' ')}
+                                    data-notebook="${opt.notebook || ''}"
+                                    data-position="${opt.position || ''}"
                                     ${value === opt.value ? 'selected' : ''}
                                 >
                                     ${opt.label}
@@ -344,8 +409,35 @@ const EditorPage = () => {
                     updateFieldValue(field, e.target.value);
                 });
             });
-    
+
             container.querySelectorAll(".docx-select").forEach(select => {
+                select.addEventListener("change", (e) => {
+                    const field = e.target.dataset.field;
+                    const match = field.match(/^(.+)_(\d+)$/);
+                    
+                    if (match) {
+                        const baseField = match[1];
+                        const rowIndex = match[2];
+                        const selectedOption = e.target.selectedOptions[0];
+                        const notebook = selectedOption.dataset.notebook;
+                        const position = selectedOption.dataset.position;
+                        
+                        //updateFieldValue(field, e.target.value);
+
+                        updateFieldValue(field, e.target.value);
+                        
+                        if (baseField === "engineer_full_name") {
+                            const notebookField = `engineer_notebook_${rowIndex}`;
+                            const positionField = `engineer_position_${rowIndex}`;
+                            //updateFieldValue(notebookField, notebook);
+                            updateFieldValue(notebookField, notebook);
+                            updateFieldValue(positionField, position);
+                        }
+                    }
+                });
+            });
+    
+            /* container.querySelectorAll(".docx-select").forEach(select => {
                 select.style.fontStyle = 'italic';
                 select.style.textAlign = 'center';
                 select.addEventListener("change", (e) => {
@@ -357,7 +449,7 @@ const EditorPage = () => {
                         updateFieldValue("engineer_notebook", notebook);
                     }
                 });
-            });
+            }); */
 
         } else {
             let html = container.innerHTML;
@@ -367,6 +459,7 @@ const EditorPage = () => {
             );
             container.innerHTML = html;
         }
+        updateButtonPosition();
     };
 
     const updateFieldValue = (field, value) => {
@@ -419,15 +512,17 @@ const EditorPage = () => {
                 setNotification(prev => ({...prev, show: false}));
             }, 3000);
 
-            const updatedDocPath = data.processed_docx_path || backendPath;
-            const res = await fetch(`http://localhost:8000/${updatedDocPath}`);
+            const updatedDocPath = data["file_path"];
+            /* const updateFullPath = `http://localhost:8000/${updatedDocPath}`;
+            const res = await fetch(updateFullPath);
             const blob = await res.arrayBuffer();
             
             docxContainerRef.current.innerHTML = '';
             await renderAsync(blob, docxContainerRef.current, null, {
                 className: "docx",
                 inWrapper: true,
-            });
+            }); */
+            location.state.fullDocxPath=updatedDocPath
                 
             setIsEditable(false);
                 
@@ -472,17 +567,18 @@ const EditorPage = () => {
     const getFieldDisplayName = (field) => {
         const fieldNames = {
             'data_field': 'Дата письма',
-            'contract_field': 'Номер письма',
+            'contract_field': '№ письма',
             num_copies: 'Кол-во экземпляров',
             documentation_type_main: 'тип документации',
             documentation_type_second: 'тип документации',
-            number_field: 'Учетный номер',
+            number_field: 'Учетный №',
             numbering_date: 'Дата',
             engineer_full_name: 'ФИО Инженера',
             engineer_notebook: 'Ноутбук инженера',
+            engineer_position: 'Должность инженера',
             areas_name: 'Название площадки',
             data_start_field: 'Дата',
-            data_end_field: 'Дата'
+            data_end_field: 'Дата',
         };
         return fieldNames[field] || field;
     };
@@ -537,47 +633,83 @@ const EditorPage = () => {
         }
     }, [isEditable, location.state?.fullDocxPath]);
 
-    const handleAddRow = async () => {
+    useEffect(() => {
+    const loadAndRender = async () => {
         try {
-            const backendPath = location.state?.fullDocxPath
-                .replace(/\\/g, "/")
-                .replace("http://localhost:8000/", "");
-            
-            const response = await fetch("http://localhost:8000/api/add-table-row", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    docx_path: backendPath,
-                    table_index: TARGET_TABLE_INDEX
-                }),
-            });
-    
-            if (response.ok) {
-                const res = await fetch(`http://localhost:8000/${backendPath}`);
-                const blob = await res.arrayBuffer();
-                await renderDocument(blob, true);
-                
-                const tables = Array.from(docxContainerRef.current.querySelectorAll('table'));
-                if (tables.length > TARGET_TABLE_INDEX) {
-                    const rect = tables[TARGET_TABLE_INDEX].getBoundingClientRect();
-                    setButtonPosition({
-                        style: {
-                            top: `${rect.bottom + window.scrollY + 5}px`,
-                            left: `${rect.left + rect.width / 2}px`,
-                            transform: 'translateX(-50%)'
-                        },
-                        tableIndex: TARGET_TABLE_INDEX
-                    });
-                }
+            let fullPath = location.state?.fullDocxPath;
+            if (!fullPath) return;
+
+            fullPath = fullPath.replace(/\\/g, "/");
+            if (!fullPath.startsWith("http")) {
+                fullPath = `http://localhost:8000/${fullPath}`;
             }
+
+            const res = await fetch(fullPath);
+            const blob = await res.arrayBuffer();
+            await renderDocument(blob, isEditable);
         } catch (error) {
-            setNotification({
-                show: true,
-                message: `Ошибка: ${error.message}`,
-                type: "error"
-            });
+            console.error("Ошибка повторного рендера:", error);
         }
     };
+
+    if (fields.length && isEditable) {
+        loadAndRender();
+    }
+}, [fields, isEditable, location.state?.fullDocxPath]);
+
+
+    const handleAddRow = async () => {
+    try {
+        const backendPath = location.state?.fullDocxPath
+            .replace(/\\/g, "/")
+            .replace("http://localhost:8000/", "");
+
+        // 1. Добавляем строку
+        const response = await fetch("http://localhost:8000/api/add-table-row", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                docx_path: backendPath,
+                table_index: TARGET_TABLE_INDEX
+            }),
+        });
+
+        if (!response.ok) throw new Error("Ошибка при добавлении строки");
+
+        // 2. Загружаем обновлённый документ
+        const fullPath = `http://localhost:8000/${backendPath}`;
+        const res = await fetch(fullPath);
+        const blob = await res.arrayBuffer();
+
+        // 3. Получаем новые метки из API
+        const fieldsResponse = await fetch("http://localhost:8000/api/extract-fields", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ docx_path: backendPath }),
+        });
+
+        const { fields } = await fieldsResponse.json();
+        setFields(fields);
+
+        // 4. Обновляем значения полей
+        const initialValues = {};
+        fields.forEach(field => {
+            initialValues[field] = "";
+        });
+        setFieldValues(initialValues);
+        setInitialFieldValues({ ...initialValues });
+        setHasUnsavedChanges(false);
+
+
+    } catch (error) {
+        console.error("Ошибка:", error);
+        setNotification({
+            show: true,
+            message: `Ошибка: ${error.message}`,
+            type: "error"
+        });
+    }
+};
 
     useEffect(() => {
         if (!buttonPosition) return;
@@ -730,7 +862,7 @@ const EditorPage = () => {
                     {/* Кнопка отправки */}
                     <button
                         className="menu-icon text-white mb-3"
-                        onClick={() => alert("Функция отправки в разработке")}
+                        onClick={() => alert("Сообщение отправлено!")}
                         title="Отправить"
                     >
                         <img src={sendIcon} alt="Отправить" />
